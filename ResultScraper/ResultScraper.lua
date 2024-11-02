@@ -217,13 +217,13 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
             --Song Data
             local songInfo = {
-                name   = song:GetTranslitFullTitle(),
-                artist = song:GetTranslitArtist(),
-                pack   = song:GetGroupName(),
+                name   = escapeString(song:GetTranslitFullTitle()),
+                artist = escapeString(song:GetTranslitArtist()),
+                pack   = escapeString(song:GetGroupName()),
                 length = song:GetStepsSeconds(),
-                stepartist = GAMESTATE:GetCurrentSteps(side):GetAuthorCredit(),
+                stepartist = escapeString(GAMESTATE:GetCurrentSteps(side):GetAuthorCredit()),
                 difficulty = GAMESTATE:GetCurrentSteps(side):GetMeter(),
-                description = GAMESTATE:GetCurrentSteps(side):GetDescription(),
+                description = escapeString(GAMESTATE:GetCurrentSteps(side):GetDescription()),
                 hash = ""
             }
             songInfo.length = string.format("%d:%02d", math.floor(songInfo.length/60), math.floor(songInfo.length%60))
@@ -242,7 +242,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
             
             -- Result Data
             local resultInfo = {
-                playerName = GAMESTATE:GetPlayerDisplayName(side),
+                playerName = escapeString(GAMESTATE:GetPlayerDisplayName(side)),
                 score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(side):GetPercentDancePoints()):gsub("%%", ""),
                 exscore = ("%.2f"):format(CalculateExScore(side)),
                 grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(side):GetGrade(),
