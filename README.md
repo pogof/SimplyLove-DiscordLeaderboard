@@ -68,4 +68,4 @@ The bot can be added to multiple servers, the shoutout will be only sent to the 
 I have been able to put the application to a docker container, however I havent been able to make it work with my reverse proxy, assuming user error for now. Dockerfile and docker-compose.yaml are included.
 
 ## Major bugs
-Chart `ITL2024 [1000] [07] Idol (Medium)` returns error 400 on the bot side, skipping any and all code that should actually result in such error. From all my testing it is the only chart, the json sent seems fine to me though. 
+No major bugs as of now. Except for all the possible errors that may pop-up with the lack of error handling. 
