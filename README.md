@@ -47,7 +47,7 @@ Code has been modified slightly (added .env) and has been untested (but I assume
 
 Discord bot includes Flask as it needs to listen to external traffic. By default it listens on `/send` How to setup a Discord bot is beyond the scope of this repository. Data is stored in sqlite database. Scatter plot is created using matplotlib
 
-For your convenience the URL that should be prefilled in the file sent to the player is changable in the .env file, same as the discord bot token.
+For your convenience the URL that should be prefilled in the file sent to the player is changable in the `.env` file (rename `.env.template` to just `.env`), same as the discord bot token.
 
 ### How it works
 
