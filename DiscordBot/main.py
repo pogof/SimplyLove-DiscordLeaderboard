@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta
 import discord
 from discord.ext import commands
+from discord import app_commands
+from discord.utils import escape_mentions
 import sqlite3
 import secrets
 from flask import Flask, request, jsonify
@@ -9,11 +12,270 @@ import matplotlib.pyplot as plt
 import json
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
+
 
 dev = False
 
+
+#================================================================================================
+# Set up the Discord bot and Flask app
+#================================================================================================
+
+# Initialize Flask app
+app = Flask(__name__) #TODO: Change this to your app name
+
+# Initialize Discord bot
+intents = discord.Intents.default()
+intents.members = True  # Enable the members intent
+intents.message_content = True  # Enable the message content intent
+client = commands.Bot(command_prefix='!', intents=intents)
+
+database = 'database.db'
+
+
+#================================================================================================
+# Sync commands on bot startup
+#================================================================================================
+#================================================================================================
+@client.event
+async def on_ready():
+    print('Bot is ready.')
+    try:
+        sync = await client.tree.sync()
+        print(f"Synced {len(sync)} commands.")
+    except Exception as e:
+        print(f"An error occurred while syncing commands: {e}")
+
+
+#================================================================================================
+# Commands
+#================================================================================================
+# Help command
+#================================================================================================
+
+@client.tree.command(name="help", description="Shows the available commands.")
+async def help(Interaction: discord.Interaction):
+    message: str = """
+    **Here are the available commands:**
+    `/help - Shows the available commands.`
+    `/generate - Generates a new API key and sends it to your DM.`
+    `/disable - Disables submitting scores for a specified amount of time or till re-enabled.`
+    `/enable - Enables submitting scores.`
+    `/usethischannel - (Un)Sets the current channel as the results channel. You may use it in multiple channels. (Admin only).`
+    """
+    # Send the help message as an ephemeral message
+    await Interaction.response.send_message(message, ephemeral=True)
+
+
+#================================================================================================
+# Command to set or unset the results channel
+#================================================================================================
+
+@client.tree.command(name="usethischannel", description="(Un)Set the current channel as the results channel. (Admin only)")
+@commands.has_permissions(administrator=True)
+async def usethischannel(Interaction: discord.Interaction):
+    if Interaction.guild is None:
+        await Interaction.response.send_message("This command can only be used in a server.")
+        return
+    
+    server_id = str(Interaction.guild.id)
+    channel_id = str(Interaction.channel.id)
+
+    try:
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        c.execute('SELECT 1 FROM CHANNELS WHERE serverID = ? AND channelID = ?', (server_id, channel_id))
+        if c.fetchone():
+            c.execute('DELETE FROM CHANNELS WHERE serverID = ? AND channelID = ?', (server_id, channel_id))
+            await Interaction.response.send_message(f'This channel has been unset as the results channel.', ephemeral=True)
+        else:
+            c.execute('INSERT INTO CHANNELS (serverID, channelID) VALUES (?, ?)', (server_id, channel_id))
+            await Interaction.response.send_message(f'This channel has been set as the results channel.', ephemeral=True)
+        conn.commit()
+        conn.close()
+        #await Interaction.response.send_message(f'This channel has been set as the results channel.', ephemeral=True)
+    except Exception as e:
+        await Interaction.response.send_message(f"An error occurred: {e}")
+
+@usethischannel.error
+async def usethischannel_error(Interaction: discord.Interaction, error: commands.CommandError):
+    if isinstance(error, commands.MissingPermissions):
+        await Interaction.response.send_message("You do not have the required permissions to use this command.", ephemeral=True)
+    else:
+        await Interaction.response.send_message("An error occurred while trying to run this command.", ephemeral=True)
+
+
+#================================================================================================
+# Generate API key
+#================================================================================================
+
+@client.tree.command(name="generate", description="Generates a new API key and sends it to your DM.")
+async def generate(Interaction: discord.Interaction):
+    if Interaction.guild is None:
+        await Interaction.response.send_message("This command can only be used in a server.")
+        return
+    
+    user_id = str(Interaction.user.id)
+
+    # Generate a unique 20-character long key
+    while True:
+        api_key = secrets.token_urlsafe(20)[:20]
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        c.execute('SELECT 1 FROM USERS WHERE APIKey = ?', (api_key,))
+        if not c.fetchone():
+            break
+        conn.close()
+
+    c.execute('INSERT OR REPLACE INTO USERS (DiscordUser, APIKey) VALUES (?, ?)', (user_id, api_key))
+    conn.commit()
+    conn.close()
+
+
+    # Create the .ini file
+    bot_url = os.getenv('BOT_URL')
+    ini_content = f"BotURL={bot_url}\nAPIKey={api_key}\n"
+    with open('DiscordLeaderboard.ini', 'w') as ini_file:
+        ini_file.write(ini_content)
+
+    # Send the .ini file as an attachment
+    await Interaction.user.send(
+        f"""This is your new API key. DO NOT SHARE IT! If you had a key previously, the old one will no longer work.
+        \nAPI Key: `{api_key}`
+        \nCompleted ini file has been attached for your convenience. Please copy it into your profile folder.
+        \nAlso note that your scores will be sent to all servers where both you and the bot are present.
+        """,
+        file=discord.File('DiscordLeaderboard.ini')
+    )
+    await Interaction.response.send_message(f'Your key has been sent to your DM. Expect a message shortly.', ephemeral=True)
+
+
+#================================================================================================
+# Disable submitting scores
+#================================================================================================
+
+@client.tree.command(name="disable", description="Disables submitting scores. Without parameter will disable indefinitely.")
+async def disable(interaction: discord.Interaction, mins: int = 0, hours: int = 0, days: int = 0):
+    if interaction.guild is None:
+        await interaction.response.send_message("This command can only be used in a server.")
+        return
+    
+    user_id = str(interaction.user.id)
+
+    # Calculate the future date and time based on the provided parameters
+    if mins == 0 and hours == 0 and days == 0:
+        disabled_until = "disabled"
+    else:
+        current_time = datetime.now()
+        disabled_until = current_time + timedelta(minutes=mins, hours=hours, days=days)
+        disabled_until = disabled_until.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Database operations
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute('UPDATE USERS SET submitDisabled = ? WHERE DiscordUser = ?', (disabled_until, user_id))
+    conn.commit()
+    conn.close()
+
+    await interaction.response.send_message(f"Submitting scores has been disabled until {disabled_until}", ephemeral=True)
+
+
+#================================================================================================
+# Enable submitting scores
+#================================================================================================
+
+@client.tree.command(name="enable", description="Enables submitting scores.")
+async def enable(interaction: discord.Interaction):
+    if interaction.guild is None:
+        await interaction.response.send_message("This command can only be used in a server.")
+        return
+    
+    user_id = str(interaction.user.id)
+
+    # Database operations
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute('UPDATE USERS SET submitDisabled = ? WHERE DiscordUser = ?', ('enabled', user_id))
+    conn.commit()
+    conn.close()
+
+    await interaction.response.send_message("Submitting scores has been enabled.", ephemeral=True)
+
+
+#================================================================================================
+# Database
+#================================================================================================
+#================================================================================================
+
+# Initialize database
+def init_db():
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS USERS
+                 (DiscordUser TEXT PRIMARY KEY, APIKey TEXT, submitDisabled TEXT DEFAULT 'enabled')''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS
+                 (serverID TEXT, channelID TEXT, PRIMARY KEY (serverID, channelID))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS SUBMISSIONS
+                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
+                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+
+#================================================================================================
+# Scatterplot generation
+#================================================================================================
+#================================================================================================
+
+def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.png'):
+    # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
+    x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
+    y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
+    colors = [point['color'] for point in data if point['y'] not in [0, 200]]
+    
+    # Extract lifebarInfo data points
+    lifebar_x_values = [point['x'] for point in lifebar_info]
+    lifebar_y_values = [-200+point['y'] for point in lifebar_info]
+
+
+    # Set plot size
+    plt.figure(figsize=(10, 2))  # Size in inches (1000x200 pixels)
+
+    # Add a horizontal line at y = -100 (center of judgement)
+    plt.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
+
+    # Add the step scatter points
+    plt.scatter(x_values, y_values, c=colors, marker='s', s=5)
+    
+    # Add vertical lines for all points with y=200 (misses)
+    for point in data:
+        if point['y'] == 200:
+            vertical_line_color = point['color']
+            plt.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
+    
+    # Plot lifebarInfo as a continuous line
+    plt.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
+
+    # Set the x-axis limits to 0 to 1000
+    plt.xlim(0, 1000)
+    # Set the y-axis limits to -210 to 10
+    plt.ylim(-210, 10) #TODO: Zoom based on worst judgement (excluding misses)
+    plt.axis('off')
+    plt.gca().set_facecolor('black')
+    plt.gcf().patch.set_facecolor('black')
+    plt.savefig(output_file, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+
+#================================================================================================
+# Grade mapping
+#================================================================================================
+#================================================================================================
 
 grade_mapping = {
     'Grade_Tier00': '⭐⭐⭐⭐⭐',
@@ -37,169 +299,12 @@ grade_mapping = {
     'Grade_Tier99': 'Q?'
 }
 
-#================================================================================================
-
-def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.png'):
-    # Extract x, y, and color values, excluding points with y=0 or y=200
-    x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
-    y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
-    colors = [point['color'] for point in data if point['y'] not in [0, 200]]
-    
-    # Extract lifebarInfo data points
-    lifebar_x_values = [point['x'] for point in lifebar_info]
-    lifebar_y_values = [-200+point['y'] for point in lifebar_info]
-
-
-    # Create the scatter plot
-    plt.figure(figsize=(10, 2))  # Size in inches (1000x200 pixels)
-
-    # Add a horizontal line at y = -100
-    plt.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
-
-    # Add the step scatter points
-    plt.scatter(x_values, y_values, c=colors, marker='s', s=5)
-    
-
-    # Add vertical lines for all points with y=200 (aka for all misses)
-    for point in data:
-        if point['y'] == 200:
-            vertical_line_color = point['color']
-            plt.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
-    
-    # Plot lifebarInfo as a continuous line
-    plt.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
-
-
-    # Set the x-axis limits to 0 to 1000
-    plt.xlim(0, 1000)
-    # Set the y-axis limits to -210 to 10
-    plt.ylim(-210, 10)
-    plt.axis('off')
-    plt.gca().set_facecolor('black')
-    plt.gcf().patch.set_facecolor('black')
-    plt.savefig(output_file, bbox_inches='tight', pad_inches=0)
-    plt.close()
-
-    # Display the plot
-    #plt.show()
 
 #================================================================================================
-
-# Initialize Flask app
-app = Flask(__name__) #TODO: Change this to your app name
-
+# Flask route to receive external data and send it to Discord
 #================================================================================================
-# Initialize database
-def init_db():
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS USERS
-                 (DiscordUser TEXT PRIMARY KEY, APIKey TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS
-                 (serverID TEXT PRIMARY KEY, channelID TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS SUBMISSIONS
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT)''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
 #================================================================================================
 
-intents = discord.Intents.default()
-intents.members = True  # Enable the members intent
-intents.message_content = True  # Enable the message content intent
-client = commands.Bot(command_prefix='!', intents=intents)
-
-#================================================================================================
-
-@client.event
-async def on_ready():
-    print('Bot is ready.')
-
-#================================================================================================
-
-@client.command()
-@commands.has_permissions(administrator=True)
-async def usethischannel(ctx):
-    if ctx.guild is None:
-        await ctx.send("This command can only be used in a server.")
-        return
-
-    server_id = str(ctx.guild.id)
-    channel_id = str(ctx.channel.id)
-
-    try:
-        conn = sqlite3.connect('users.db')
-        c = conn.cursor()
-        c.execute('INSERT OR REPLACE INTO CHANNELS (serverID, channelID) VALUES (?, ?)', (server_id, channel_id))
-        conn.commit()
-        conn.close()
-        await ctx.send(f'This channel has been set as the results channel. You can change it at any time by running this command again in different channel.')
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
-
-@usethischannel.error
-async def usethischannel_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("You do not have the required permissions to use this command.")
-    else:
-        await ctx.send("An error occurred while trying to run this command.")
-
-#================================================================================================
-
-client.remove_command('help')
-@client.command()
-async def help(ctx):
-    help_message = """
-    **Here are the available commands:**
-    `!generate` - Generates a new API key and sends it to your DM.
-    `!usethischannel` - Sets the current channel as the results channel (Admin only).
-    """
-    await ctx.send(help_message)
-
-#================================================================================================
-
-@client.command()
-async def generate(ctx):
-    user_id = str(ctx.author.id)
-    
-    # Generate a unique 20-character long key
-    while True:
-        api_key = secrets.token_urlsafe(20)[:20]
-        conn = sqlite3.connect('users.db')
-        c = conn.cursor()
-        c.execute('SELECT 1 FROM USERS WHERE APIKey = ?', (api_key,))
-        if not c.fetchone():
-            break
-        conn.close()
-
-    c.execute('INSERT OR REPLACE INTO USERS (DiscordUser, APIKey) VALUES (?, ?)', (user_id, api_key))
-    conn.commit()
-    conn.close()
-
-    bot_url = os.getenv('BOT_URL')
-
-    # Create the .ini file
-    ini_content = f"BotURL={bot_url}\nAPIKey={api_key}\n"
-    with open('DiscordLeaderboard.ini', 'w') as ini_file:
-        ini_file.write(ini_content)
-
-    # Send the .ini file as an attachment
-    await ctx.author.send(
-        f"""This is your new API key. DO NOT SHARE IT! If you had a key previously, the old one will no longer work.
-        \nAPI Key: `{api_key}`
-        \nCompleted ini file has been attached for your convenience. Please copy it into your profile folder.
-        \nAlso note that your scores will be sent to all servers where both you and the bot are present.
-        """,
-        file=discord.File('DiscordLeaderboard.ini')
-    )
-    await ctx.send(f'Your key has been sent to your DM. Expect a message shortly.')
-
-#================================================================================================
 
 # Flask route to receive external data
 @app.route('/send', methods=['POST'])
@@ -210,7 +315,7 @@ def send_message():
     if not api_key:
         return jsonify({'status': 'Request is missing API Key.'}), 402
 
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect(database)
     c = conn.cursor()
     c.execute('SELECT DiscordUser FROM USERS WHERE APIKey = ?', (api_key,))
     result = c.fetchone()
@@ -227,7 +332,7 @@ def send_message():
     
     isPB = False
     # Check if the entry is already present via the hash and user ID
-    conn = sqlite3.connect('users.db')
+    conn = sqlite3.connect(database)
     c = conn.cursor()
     c.execute('SELECT exScore FROM SUBMISSIONS WHERE hash = ? AND userID = ?', (data.get('hash'), user_id))
     existing_entry = c.fetchone()
@@ -263,7 +368,7 @@ def send_message():
             member = guild.get_member(user_id)
             if member:
                 # Fetch the channel ID from the CHANNELS table for this guild
-                conn = sqlite3.connect('users.db')
+                conn = sqlite3.connect(database)
                 c = conn.cursor()
                 c.execute('SELECT channelID FROM CHANNELS WHERE serverID = ?', (str(guild.id),))
                 channel_result = c.fetchone()
@@ -275,7 +380,7 @@ def send_message():
                     if channel:
 
                         # Fetch the top 3 EX scores for the given hash that are also part of the same server
-                        conn = sqlite3.connect('users.db')
+                        conn = sqlite3.connect(database)
                         c = conn.cursor()
                         c.execute('''SELECT userID, exScore 
                                      FROM SUBMISSIONS 
@@ -316,13 +421,15 @@ def send_message():
     return jsonify({'status': 'success'}), 200
 
 
+#================================================================================================
+# Run Flask, run Discord bot
+#================================================================================================
+#================================================================================================
 
 # Run Flask app in a separate thread
 def run_flask():
     app.run(host='0.0.0.0', port=5000)
-
 threading.Thread(target=run_flask).start()
 
 bot_token = os.getenv('DISCORD_BOT_TOKEN')
-
 client.run(bot_token)
