@@ -2,3 +2,4 @@ discord.py
 Flask
 matplotlib
 python-dotenv
+seaborn
