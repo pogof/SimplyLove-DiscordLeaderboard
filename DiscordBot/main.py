@@ -844,8 +844,10 @@ def extract_data_from_row(row):
 #================================================================================================
 
 def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.dark_grey()):
+    
+    print(data.get('scatterplotData'))
 
-    if data.get('scatterPlot') is None:
+    if data.get('scatterplotData') is None:
         embed = discord.Embed(title="Unable to recall score", color=color)
         embed.add_field(name="Error", value="Required data were not collected for old scores. If you want to recall then get better score :P", inline=False)
         file = discord.File('lmao2.gif', filename='lmao2.gif')
