@@ -78,7 +78,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
             local LastSecond = GAMESTATE:GetCurrentSong():GetLastSecond()
         
             local worst_window = GetTimingWindow(math.max(2, GetWorstJudgment(sequential_offsets)))
-        
+
             local colors = {}
             for w = NumJudgmentsAvailable(), 1, -1 do
                 if SL[pn].ActiveModifiers.TimingWindows[w] == true then
@@ -105,15 +105,16 @@ u["ScreenEvaluationStage"] = Def.Actor {
                 if Offset ~= "Miss" then
                     local TimingWindow = DetermineTimingWindow(Offset)
                     local y = scale(Offset, worst_window, -worst_window, 0, GraphHeight)
-        
+                    
+
                     local c = colors[TimingWindow]
         
-                    if mods.ShowFaPlusWindow and mods.ShowFaPlusPane then
+
                         local abs_offset = math.abs(Offset)
                         if abs_offset > GetTimingWindow(1, "FA+") and abs_offset <= GetTimingWindow(2, "FA+") then
                             c = SL.JudgmentColors["FA+"][2]
                         end
-                    end
+
         
                     local r = c[1]
                     local g = c[2]
@@ -128,7 +129,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
                 end
             end
         
-            return scatterplotData
+            return scatterplotData, worst_window
         end
 
         --------------------------------------------------------------------------------------------------
@@ -248,7 +249,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
                 grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(side):GetGrade(),
             }
 
-            local scatterplotData = getScatterplotData(side, 1000, 200)
+            local scatterplotData, worst_window = getScatterplotData(side, 1000, 200)
             local scatterplotDataJson = encode(scatterplotData)
 
             local lifebarInfo = GetLifebarData(side, 1000, 200)
@@ -256,7 +257,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
             -- Prepare JSON data
             local jsonData = string.format(
-                '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s","itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s}',
+                '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s","itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s}',
                 key,
                 songInfo.name,
                 songInfo.artist,
@@ -269,7 +270,8 @@ u["ScreenEvaluationStage"] = Def.Actor {
                 resultInfo.grade,
                 songInfo.hash,
                 scatterplotDataJson,
-                lifebarInfoJson)
+                lifebarInfoJson,
+                ("%.4f"):format(worst_window))
                 
             debugPrint("JSON Data: "..jsonData)    
 

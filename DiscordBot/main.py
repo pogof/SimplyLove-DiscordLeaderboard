@@ -14,6 +14,7 @@ import seaborn as sns
 import json
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -229,6 +230,7 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
     if user is None:
         query += " AND userID = ?"
         params.append(str(interaction.user.id))
+        user = interaction.user
     if difficulty:
         query += " AND difficulty = ?"
         params.append(str(difficulty))
@@ -245,7 +247,6 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
     if not results:
         await interaction.response.send_message("No scores found matching the criteria.", ephemeral=private)
         return
-
 
     if len(results) > 1:
         options = [
@@ -265,7 +266,7 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
-                embed, file = embedded_score(data, str(interaction.user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
+                embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 top_scores_message = get_top_scores(selected_row, interaction, 3)
                 embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
                 
@@ -280,11 +281,10 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
-        embed, file = embedded_score(data, str(interaction.user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
+        embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
         top_scores_message = get_top_scores(selected_row, interaction, 3)
         embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
@@ -293,99 +293,132 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
 # compare two users
 #================================================================================================
 
-# @client.tree.command(name="compareall", description="Compare two users' scores. If only one user is provided, it will compare their scores with yours.")
-# @app_commands.describe(user_one="The first user to compare", user_two="The second user to compare (optional)", private="Whether the response should be private")
-# async def compareall(interaction: discord.Interaction, user_one: discord.User, user_two: discord.User = None, private: bool = False):
-#     if interaction.guild is None:
-#         await interaction.response.send_message("This command can only be used in a server.")
-#         return
+@client.tree.command(name="compareall", description="Compare two users' scores. If only one user is provided, it will compare their scores with yours.")
+@app_commands.describe(user_one="The first user to compare", user_two="The second user to compare (optional)", private="Whether the response should be private", order="The order asc/desc_ex, _alpha, _diff")
+async def compareall(interaction: discord.Interaction, user_two: discord.User, user_one: discord.User = None, page: int = 1, order: str = "desc_ex", private: bool = True, pack: str = "", difficulty: int = 0):
+    if interaction.guild is None:
+        await interaction.response.send_message("This command can only be used in a server.")
+        return    
+    if user_one is None:
+        user_one = interaction.user
+
+    user_one_id = str(user_one.id)
+    user_two_id = str(user_two.id)
+    # Check not needed, Discord won't let you interact with users not on the server
+
+
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+
+    # Determine the order by clause based on the selected order
+    if order == "asc_ex":
+        order_by = "s1.exScore ASC"
+    elif order == "desc_ex":
+        order_by = "s1.exScore DESC"
+    elif order == "asc_alpha":
+        order_by = "s1.songName ASC"
+    elif order == "desc_alpha":
+        order_by = "s1.songName DESC"
+    elif order == "asc_diff":
+        order_by = "s1.exScore - s2.exScore ASC"
+    elif order == "desc_diff":
+        order_by = "s1.exScore - s2.exScore DESC"
+    else:
+        order_by = "s1.exScore DESC"  # Default order
+
     
-#     if user_two is None:
-#         user_two = interaction.user
+    # Build the query with optional filters for difficulty and pack
+    query = f'''SELECT s1.songName, s1.artist, s1.pack, s1.difficulty, s1.exScore, s2.exScore
+                FROM SUBMISSIONS s1
+                JOIN SUBMISSIONS s2 ON s1.hash = s2.hash
+                WHERE s1.userID = ? AND s2.userID = ?'''
+    
+    params = [user_one_id, user_two_id]
 
-#     user_one_id = str(user_one.id)
-#     user_two_id = str(user_two.id)
+    if difficulty:
+        query += " AND s1.difficulty = ? AND s2.difficulty = ?"
+        params.extend([str(difficulty), str(difficulty)])
+    if pack:
+        query += " AND s1.pack = ? AND s2.pack = ?"
+        params.extend([str(pack), str(pack)])
 
-#     conn = sqlite3.connect(database)
-#     c = conn.cursor()
+    query += f" ORDER BY {order_by}"
 
-#     # Find all hashes that have been played by both players
-#     c.execute('''SELECT hash 
-#                  FROM SUBMISSIONS 
-#                  WHERE userID = ? 
-#                  INTERSECT 
-#                  SELECT hash 
-#                  FROM SUBMISSIONS 
-#                  WHERE userID = ?''', (user_one_id, user_two_id))
-#     common_hashes = c.fetchall()
+    # Execute the query with the parameters
+    c.execute(query, params)
+    common_scores = c.fetchall()
+    conn.close()
 
-#     if not common_hashes:
-#         await interaction.response.send_message("No common scores found between the two users.", ephemeral=private)
-#         conn.close()
-#         return
+    if not common_scores:
+        await interaction.response.send_message("No common scores found between the two users.", ephemeral=private)
+        return
 
-#     embed = discord.Embed(title="Score Comparison", color=discord.Color.blue())
-#     #embed.add_field(name="", value=f"", inline=True)
-#     embed.add_field(name="Player One", value=f"<@!{user_one_id}>", inline=True)
-#     embed.add_field(name="Player Two", value=f"<@!{user_two_id}>", inline=True)
-#     embed.add_field(name="Difference", value="", inline=True)
+    results = []
+    for song_name, artist, pack, difficulty, user_one_ex_score, user_two_ex_score in common_scores:
+        difference = round(float(user_one_ex_score) - float(user_two_ex_score), 2)
+        results.append({
+            "song_name": song_name,
+            "artist": artist,
+            "pack": pack,
+            "difficulty": difficulty,
+            "user_one_ex_score": user_one_ex_score,
+            "user_two_ex_score": user_two_ex_score,
+            "difference": difference
+        })
 
-#     # Initialize a counter
-#     score_count = 0
-#     max_scores = 5
+    await compareall_logic(interaction, page, order, private, results, user_one_id, user_two_id)
 
-#     for hash_tuple in common_hashes:
-#         hash_value = hash_tuple[0]
 
-#         # Get scores for user one
-#         c.execute('''SELECT songName, artist, pack, difficulty, exScore 
-#                     FROM SUBMISSIONS 
-#                     WHERE userID = ? AND hash = ?''', (user_one_id, hash_value))
-#         user_one_score = c.fetchone()
+async def compareall_logic(interaction: discord.Interaction, page: int, order, private, results, user_one_id, user_two_id):
+    
+    order_mapping = {
+        "asc_ex": "Ascending EX Score",
+        "desc_ex": "Descending EX Score",
+        "asc_alpha": "Ascending Alphabetical Order",
+        "desc_alpha": "Descending Alphabetical Order",
+        "asc_diff": "Ascending Difference",
+        "desc_diff": "Descending Difference"
+    }
+    
+    embed=discord.Embed(title=f"Score Comparison - Order: {order_mapping[order]}", color=discord.Color.blue())
+    embed.set_footer(text=f"Page {page}")
+    #embed.set_author(name="Compare All")
+    embed.add_field(name="Player One", value=f"<@!{user_one_id}>", inline=True)
+    embed.add_field(name="Player Two", value=f"<@!{user_two_id}>", inline=True)
+    embed.add_field(name="Difference", value="", inline=True)
+    
+    for i in range((page - 1) * 5, min(page * 5, len(results))):
+        result = results[i]
+        embed.add_field(
+            name=f"{result['song_name']} - {result['artist']} [{result['difficulty']}]",
+            value=f"Pack: {result['pack']}",
+            inline=False
+        )
+        embed.add_field(name="", value=f"{result['user_one_ex_score']}%", inline=True)
+        embed.add_field(name="", value=f"{result['user_two_ex_score']}%", inline=True)
+        embed.add_field(name="", value=f"{result['difference']}%", inline=True)
 
-#         # Get scores for user two
-#         c.execute('''SELECT exScore 
-#                     FROM SUBMISSIONS 
-#                     WHERE userID = ? AND hash = ?''', (user_two_id, hash_value))
-#         user_two_score = c.fetchone()
+    await interaction.response.send_message(embed=embed, ephemeral=private)
 
-#         if user_one_score and user_two_score:
-#             song_name, artist, pack, difficulty, user_one_ex_score = user_one_score
-#             user_two_ex_score = user_two_score[0]
+    class NextPageButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label="Next Page", style=discord.ButtonStyle.primary)
 
-#             embed.add_field(
-#                 name=f"{song_name} - {artist} [{difficulty}]",
-#                 value=f"Pack: {pack}",
-#                 inline=False
-#             )
-#             embed.add_field(name="", value=f'{user_one_ex_score}%', inline=True)
-#             embed.add_field(name="", value=f'{user_two_ex_score}%', inline=True)
-#             difference = round(float(user_one_ex_score) - float(user_two_ex_score), 2)
-#             embed.add_field(name="", value=f'{difference}%', inline=True)
+        async def callback(self, button_interaction: discord.Interaction):
+            await compareall_logic(button_interaction, page=page + 1, order=order, private=private, results=results, user_one_id=user_one_id, user_two_id=user_two_id)
 
-#             # Increment the counter
-#             score_count += 1
+    class PreviousPageButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label="Previous Page", style=discord.ButtonStyle.primary)
 
-#             # Check if the maximum number of scores has been reached
-#             if score_count >= max_scores:
-#                 break
+        async def callback(self, button_interaction: discord.Interaction):
+            await compareall_logic(button_interaction, page=page - 1, order=order, private=private, results=results, user_one_id=user_one_id, user_two_id=user_two_id)
 
-#     # If there are more scores, add a button to show the next 10 scores
-#     if score_count >= max_scores:
-#         button = discord.ui.Button(label="Show more", style=discord.ButtonStyle.primary)
-
-#         async def button_callback(interaction):
-#             # Logic to show the next 10 scores
-#             pass
-
-#         button.callback = button_callback
-#         view = discord.ui.View()
-#         view.add_item(button)
-#         await interaction.response.send_message(embed=embed, view=view, ephemeral=private)
-#     else:
-#         await interaction.response.send_message(embed=embed, ephemeral=private)
-
-#     conn.close()
+    view = discord.ui.View()
+    if page > 1:
+        view.add_item(PreviousPageButton())
+    view.add_item(NextPageButton())
+    await interaction.edit_original_response(view=view)
 
 
 #================================================================================================
@@ -403,7 +436,6 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     else:
         query = "SELECT * FROM SUBMISSIONS WHERE 1=1"
     
-    
     params = []
 
     if song:
@@ -415,12 +447,14 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     if user is None:
         query += " AND userID = ?"
         params.append(str(interaction.user.id))
+        user = interaction.user
     if difficulty:
         query += " AND difficulty = ?"
         params.append(str(difficulty))
     if pack:
         query += " AND pack = ?"
         params.append(str(pack))
+
 
     conn = sqlite3.connect(database)
     c = conn.cursor()
@@ -431,7 +465,6 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     if not results:
         await interaction.response.send_message("No scores found matching the criteria.", ephemeral=private)
         return
-
 
     if len(results) > 1:
         options = [
@@ -451,9 +484,7 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
-                embed, file = embedded_breakdown(data, str(interaction.user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
-                #top_scores_message = get_top_scores(selected_row, interaction, 3)
-                #embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
+                embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 
                 #TODO: It worked without deleting the message, at least for a little while :(
                 #Need to figure something out lol
@@ -466,63 +497,7 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
-        embed, file = embedded_breakdown(data, str(interaction.user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
-
-        judgements = {
-            'fa_p': 0,
-            'e_fa': 0,
-            'l_fa': 0,
-            'e_ex': 0,
-            'l_ex': 0,
-            'e_gd': 0,
-            'l_gd': 0,
-            'e_de': 0,
-            'l_de': 0,
-            'e_wo': 0,
-            'l_wo': 0,
-            'miss': 0
-        }
-        
-        y_values = [100-point['y'] for point in data['scatterplotData']]
-        
-        i = 0
-        for y in y_values:
-            if  -15/2 <= y <= 15/2:
-                judgements['fa_p'] += 1
-            elif -23/2 <= y < -15/2:
-                judgements['e_fa'] += 1
-            elif 15/2 > y >= 23/2:
-                judgements['l_fa'] += 1
-            elif -44.5/2 <= y < -23/2:
-                judgements['e_ex'] += 1
-            elif 44.5/2 > y >= 23/2:
-                judgements['l_ex'] += 1
-            elif -103.5/2 <= y < -44.5/2:
-                judgements['e_gd'] += 1
-            elif 103.5/2 > y >= 44.5/2:
-                judgements['l_gd'] += 1
-            elif -136.5/2 <= y < -103.5/2:
-                judgements['e_de'] += 1
-            elif 136.5/2 > y >= 103.5/2:
-                judgements['l_de'] += 1
-            elif -181.5/2 <= y < -136.5/2:
-                judgements['e_wo'] += 1
-            elif 181.5/2 > y >= 136.5/2:
-                judgements['l_wo'] += 1
-            elif y == 100:
-                judgements['miss'] += 1
-            i += 1
-
-        judgements['miss'] = int(judgements['miss'] / 2)
-
-        print(i-judgements['miss'])
-
-
-        embed.add_field(name="Judgements", value=f"FA+: {judgements['fa_p']}\nFantastic: {judgements['e_fa']}/{judgements['l_fa']}\nExcellent: {judgements['e_ex']}/{judgements['l_ex']}\nGreat: {judgements['e_gd']}/{judgements['l_gd']}\nDecent: {judgements['e_de']}/{judgements['l_de']}\nWay Off: {judgements['e_wo']}/{judgements['l_wo']}\nMiss: {judgements['miss']}", inline=False)
-
-        #top_scores_message = get_top_scores(selected_row, interaction, 3)
-        #embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-
+        embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
@@ -545,12 +520,12 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS SUBMISSIONS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON)''')
+                  scatter JSON, life JSON, worstWindow TEXT)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS FAILS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter TEXT, life TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT)''')
     conn.commit()
     conn.close()
 
@@ -565,7 +540,6 @@ init_db()
 
 def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.png'):
 
-
     # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
     x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
     y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
@@ -574,7 +548,6 @@ def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.p
     # Extract lifebarInfo data points
     lifebar_x_values = [point['x'] for point in lifebar_info]
     lifebar_y_values = [-200+point['y'] for point in lifebar_info]
-
 
     # Set plot size
     plt.figure(figsize=(10, 2))  # Size in inches (1000x200 pixels)
@@ -609,13 +582,12 @@ def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.p
 # Distribution generation
 #================================================================================================
 
-def create_distribution_from_json(data, lifebar_info,  output_file='distribution.png'):
-
+def create_distribution_from_json(data, worstWindow,  output_file='distribution.png'):
 
     # Assuming x_values and y_values are already defined
-    y_values = [100-point['y'] for point in data if point['y'] not in [0, 200]]
-
-
+    y_values = [point['y'] for point in data if point['y'] not in [0, 200]]
+    
+    jt = set_scale(worstWindow)
 
     # Create a figure
     plt.figure(figsize=(10, 6))
@@ -631,22 +603,24 @@ def create_distribution_from_json(data, lifebar_info,  output_file='distribution
     if isinstance(y_data[0], np.ndarray):
         y_data = np.concatenate(y_data)
 
-    plt.axvline(x=0, color='white', alpha=0.5 , linestyle='-', linewidth=3)
+    plt.axvline(x=100, color='white', alpha=0.5 , linestyle='-', linewidth=3)
     
     # Fill the area under the curve with different colors
-    plt.fill_between(x_data, y_data, where=((x_data >= -181.5/2) & (x_data <= 181.5/2)), color='#c9855e')
-    plt.fill_between(x_data, y_data, where=((x_data >= -136.5/2) & (x_data <= 136.5/2)), color='#b45cff')
-    plt.fill_between(x_data, y_data, where=((x_data >= -103.5/2) & (x_data <= 103.5/2)), color='#66c955')
-    plt.fill_between(x_data, y_data, where=((x_data >= -44.5/2) & (x_data <= 44.5/2)), color='#e29c18')
-    plt.fill_between(x_data, y_data, where=((x_data >= -23/2) & (x_data <= 23/2)), color='#ffffff')
-    plt.fill_between(x_data, y_data, where=((x_data >= -15/2) & (x_data <= 15/2)), color='#21cce8')
-
-
-
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_wo']) & (x_data <= jt['e_wo'])), color='#c9855e')
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_de']) & (x_data <= jt['e_de'])), color='#b45cff')
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_gr']) & (x_data <= jt['e_gr'])), color='#66c955')
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_ex']) & (x_data <= jt['e_ex'])), color='#e29c18')
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_fa']) & (x_data <= jt['e_fa'])), color='#ffffff')
+    plt.fill_between(x_data, y_data, where=((x_data >= jt['l_fap']) & (x_data <= jt['e_fap'])), color='#21cce8')
 
     # Set the x-axis
-    plt.xlim(-181.5/2, 181.5/2)
-    #plt.ylim(0.0001, 0.07)
+    plt.xlim(0, 200)
+    # Adjust the y-axis limits to place the peak at around 3/4 of the height
+    max_density = max(y_data)
+    plt.ylim(0, max_density * 1.33)
+
+    # Flip the x-axis
+    plt.gca().invert_xaxis()
 
     plt.axis('off')
     plt.gca().set_facecolor('black')
@@ -656,8 +630,9 @@ def create_distribution_from_json(data, lifebar_info,  output_file='distribution
 
 
 #================================================================================================
-# Grade mapping
+# Mappings lol
 #================================================================================================
+# Grade mapping
 #================================================================================================
 
 grade_mapping = {
@@ -684,6 +659,37 @@ grade_mapping = {
 
 
 #================================================================================================
+# Judgement times mapping
+#================================================================================================
+
+# Where the judgement window ends for each judgement
+# Values are scaled based on what the Scraper returns (original scale is 0.1815 to -0.1815, mapped to 0 to 200) 
+
+def scale(value, min_input, max_input, min_output, max_output):
+    return ((value - min_input) * (max_output - min_output)) / (max_input - min_input) + min_output
+
+def set_scale(worstWindow):
+
+    worst_window = float(worstWindow)
+
+    jt = {
+        'e_fap': scale(-0.015, worst_window, -worst_window, 0, 200), #0.015   
+        'l_fap': scale(0.015, worst_window, -worst_window, 0, 200), #-0.015
+        'e_fa': scale(-0.023, worst_window, -worst_window, 0, 200), #0.023
+        'l_fa': scale(0.023, worst_window, -worst_window, 0, 200), #-0.023
+        'e_ex': scale(-0.0445, worst_window, -worst_window, 0, 200), #0.0445
+        'l_ex': scale(0.0445, worst_window, -worst_window, 0, 200), #-0.0445
+        'e_gr': scale(-0.1035, worst_window, -worst_window, 0, 200), #0.1035
+        'l_gr': scale(0.1035, worst_window, -worst_window, 0, 200), #-0.1035
+        'e_de': scale(-0.1365, worst_window, -worst_window, 0, 200), #0.1365
+        'l_de': scale(0.1365, worst_window, -worst_window, 0, 200), #-0.1365
+        'e_wo': scale(-0.1815, worst_window, -worst_window, 0, 200), #0.1815
+        'l_wo': scale(0.1815, worst_window, -worst_window, 0, 200) #-0.1815
+    }
+    return jt
+
+
+#================================================================================================
 # Data from database to dict
 #================================================================================================
 
@@ -699,7 +705,8 @@ def extract_data_from_row(row):
         'length': row[8],
         'stepartist': row[9],
         'scatterplotData': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
-        'lifebarInfo': json.loads(row[12].replace("'", '"') if row[12] else '[]')
+        'lifebarInfo': json.loads(row[12].replace("'", '"') if row[12] else '[]'),
+        'worstWindow': row[13]
     }
 
 
@@ -712,7 +719,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
     grade = data.get('grade')
     mapped_grade = grade_mapping.get(grade, grade)
     embed = discord.Embed(title=title, color=color)
-    embed.add_field(name="User", value=f"<@!{user_id}>", inline=False)
+    embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Artist", value=data.get('artist'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
@@ -739,15 +746,88 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
 
 def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Color.dark_grey()):
     
+
     grade = data.get('grade')
     mapped_grade = grade_mapping.get(grade, grade)
     embed = discord.Embed(title=title, color=color)
-    embed.add_field(name="User", value=f"<@!{user_id}>", inline=False)
+    embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
     embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
 
-    create_distribution_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='distribution.png')
+    judgements = {
+            'fa_p': 0,
+            'e_fa': 0,
+            'l_fa': 0,
+            'e_ex': 0,
+            'l_ex': 0,
+            'e_gr': 0,
+            'l_gr': 0,
+            'e_de': 0,
+            'l_de': 0,
+            'e_wo': 0,
+            'l_wo': 0,
+            'miss': 0
+        }
+        
+    y_values = [point['y'] for point in data['scatterplotData'] if point['y'] != 0]
+    jt = set_scale(data.get('worstWindow'))
+
+
+    for y in y_values:
+        if jt['l_wo'] < y < jt['l_de']:
+            judgements['l_wo'] += 1
+        elif jt['l_de'] <= y < jt['l_gr']:
+            judgements['l_de'] += 1
+        elif jt['l_gr'] <= y < jt['l_ex']:
+            judgements['l_gr'] += 1
+        elif jt['l_ex'] <= y < jt['l_fa']:
+            judgements['l_ex'] += 1
+        elif jt['l_fa'] <= y < jt['l_fap']:
+            judgements['l_fa'] += 1
+        elif jt['l_fap'] <= y <= jt['e_fap']:
+            judgements['fa_p'] += 1
+        elif jt['e_fap'] < y <= jt['e_fa'] if jt['e_fa'] != 200 else y < jt['e_fa']:
+            judgements['e_fa'] += 1
+        elif jt['e_fa'] < y <= jt['e_ex'] if jt['e_ex'] != 200 else y < jt['e_ex']:
+            judgements['e_ex'] += 1
+        elif jt['e_ex'] < y <= jt['e_gr'] if jt['e_gr'] != 200 else y < jt['e_gr']:
+            judgements['e_gr'] += 1
+        elif jt['e_gr'] < y <= jt['e_de'] if jt['e_de'] != 200 else y < jt['e_de']:
+            judgements['e_de'] += 1
+        elif jt['e_de'] < y < jt['e_wo']:
+            judgements['e_wo'] += 1
+        elif y == 200:
+            judgements['miss'] += 1
+    judgements['miss'] = int(judgements['miss'] / 2)
+
+
+    embed.add_field(name="Judgements (E/L)", 
+                    value=f"""
+                    FA+: {judgements['fa_p']}
+                    FA:  {judgements['e_fa']+judgements['l_fa']} ({judgements['e_fa']}/{judgements['l_fa']})
+                    EX:  {judgements['e_ex']+judgements['l_ex']} ({judgements['e_ex']}/{judgements['l_ex']})
+                    GR:  {judgements['e_gr']+judgements['l_gr']} ({judgements['e_gr']}/{judgements['l_gr']})
+                    DE:  {judgements['e_de']+judgements['l_de']} ({judgements['e_de']}/{judgements['l_de']})
+                    WO:  {judgements['e_wo']+judgements['l_wo']} ({judgements['e_wo']}/{judgements['l_wo']})
+                    Miss: {judgements['miss']}""", inline=True)
+
+    #TODO: Figure out if I can do anything with this lol
+    # y_values = [100-point['y'] for point in data.get('scatterplotData') if point['y'] not in [0, 200]]
+
+    # std_dev_3 = np.std(y_values) * 3
+    # print(std_dev_3)
+    # mean = np.mean(y_values)
+    # print(mean)
+    # mean_abs_error = np.mean([abs(mean - y) for y in y_values])
+    # print(mean_abs_error)
+
+    # max_error = max([abs(mean - y) for y in y_values])
+    # print(max_error)
+
+    # embed.add_field(name="Graph stats", value="Hello", inline=True)
+
+    create_distribution_from_json(data.get('scatterplotData'), data.get('worstWindow'), output_file='distribution.png')
     # Send the embed with the image attachment
     file = discord.File('distribution.png', filename='distribution.png')
     embed.set_image(url="attachment://distribution.png")
@@ -807,7 +887,19 @@ def send_message():
         return jsonify({'status': 'API Key has not been found in database.'}), 403
 
     user_id, submit_disabled = result
-    
+
+    worst_window = data.get('worstWindow')
+    if not worst_window:
+        user = client.get_user(int(user_id))
+
+        asyncio.run_coroutine_threadsafe(
+        user.send(
+            "Your score was not submitted. Your submission is missing some data. Please update your module to the latest version to ensure all required data is sent."
+        ),
+        client.loop
+        )
+        return jsonify({'status': 'Request is missing worstWindow field.'}), 400
+
     isPB = False
     # Check if the entry is already present via the hash and user ID
     conn = sqlite3.connect(database)
@@ -827,37 +919,37 @@ def send_message():
 
         isPB = True
         c.execute('''UPDATE SUBMISSIONS
-                        SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?
+                        SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?
                         WHERE hash = ? AND userID = ?''',
-                    (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('hash'), user_id))
+                    (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), data.get('hash'), user_id))
         conn.commit()
 
     elif new_ex_score > existing_ex_score and data.get('grade') != 'Grade_Failed':
 
         isPB = True
         
-        c.execute('''INSERT INTO SUBMISSIONS (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (user_id, data.get('songName'), data.get('artist'), data.get('pack'), data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'), data.get('length'), data.get('stepartist'), data.get('hash'), str(data.get('scatterplotData')), str(data.get('lifebarInfo'))))
+        c.execute('''INSERT INTO SUBMISSIONS (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (user_id, data.get('songName'), data.get('artist'), data.get('pack'), data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'), data.get('length'), data.get('stepartist'), data.get('hash'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow')))
         conn.commit()
     
     elif existing_fails_entry and data.get('grade') == 'Grade_Failed' and new_ex_score > existing_fails_ex_score:
 
         c.execute('''UPDATE FAILS
-                    SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?
+                    SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?
                     WHERE hash = ? AND userID = ?''',
-                (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('hash'), user_id))
+                (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), data.get('hash'), user_id))
         conn.commit()
     
     elif (not existing_fails_entry) and data.get('grade') == 'Grade_Failed':
 
         c.execute('''INSERT INTO FAILS (userID, songName, artist, pack,
-                  difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                  (user_id, data.get('songName'), data.get('artist'), data.get('pack'),
                   data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'),
                   data.get('length'), data.get('stepartist'), data.get('hash'),
-                  str(data.get('scatterplotData')), str(data.get('lifebarInfo'))))
+                  str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow')))
         conn.commit()
 
 
@@ -874,41 +966,46 @@ def send_message():
         except ValueError:
             pass
 
-
     if isPB and submit_disabled == 'enabled':
-        embed, file = embedded_score(data, user_id, "New (Server) Personal Best!", discord.Color.green())
+
+
         for guild in client.guilds:
-            member = guild.get_member(int(user_id))
+            #print("Guilds: ", guild.name)
 
-            if member:
-                c.execute('SELECT channelID FROM CHANNELS WHERE serverID = ?', (str(guild.id),))
-                channel_result = c.fetchone()
+            c.execute('SELECT channelID FROM CHANNELS WHERE serverID = ?', (str(guild.id),))
+            channel_results = c.fetchall()
 
-                if channel_result:
-                    channel_id = int(channel_result[0])
-                    channel = client.get_channel(channel_id)
+            for channel_result in channel_results:
+                channel_id = int(channel_result[0])
+                channel = client.get_channel(channel_id)
+                if channel:
+                    #print(f"Sending message to channel: {channel.name} (ID: {channel_id}) in guild: {guild.name}")
+                    
+                    embed, file = embedded_score(data, user_id, "New (Server) Personal Best!", discord.Color.green())
+                    #embed.set_image(url="attachment://scatterplot.png")
+                    
+                    c.execute('''SELECT userID, exScore 
+                                     FROM SUBMISSIONS 
+                                     WHERE hash = ? AND userID IN (SELECT userID FROM SUBMISSIONS WHERE hash = ?) 
+                                     ORDER BY exScore DESC LIMIT 3''', (data.get('hash'), data.get('hash')))
+                    top_scores = c.fetchall()
 
-                    if channel:
-                        
-                        # Fetch the top 3 EX scores for the given hash that are also part of the same server
-                        c.execute('''SELECT userID, exScore 
-                                FROM SUBMISSIONS 
-                                WHERE hash = ? AND userID IN (SELECT userID FROM SUBMISSIONS WHERE hash = ?) 
-                                ORDER BY exScore DESC LIMIT 3''', (data.get('hash'), data.get('hash')))
-                        top_scores = c.fetchall()
+                    # Filter the top scores to include only members of the current guild
+                    top_scores = [(uid, ex_score) for uid, ex_score in top_scores if guild.get_member(int(uid))]
 
-                        # Filter the top scores to include only members of the current guild
-                        top_scores = [(uid, ex_score) for uid, ex_score in top_scores if guild.get_member(int(uid))]
+                    # Format the top 3 scores
+                    top_scores_message = ""
+                    for idx, (uid, ex_score) in enumerate(top_scores, start=1):
+                        top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
 
-                        # Format the top 3 scores
-                        top_scores_message = ""
-                        for idx, (uid, ex_score) in enumerate(top_scores, start=1):
-                            top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
 
-                        
-                        embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-                                
-                        asyncio.run_coroutine_threadsafe(channel.send(embed=embed, file=file, allowed_mentions=discord.AllowedMentions.none()), client.loop)
+                    
+                    embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
+
+
+                    asyncio.run_coroutine_threadsafe(channel.send(embed=embed, file=file, allowed_mentions=discord.AllowedMentions.none()), client.loop)
+                #else:
+                    #print(f"Channel with ID {channel_id} not found in guild {guild.name}")
 
 
     conn.close()
