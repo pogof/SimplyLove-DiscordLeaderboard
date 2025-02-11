@@ -172,7 +172,7 @@ async def disable(interaction: discord.Interaction, mins: int = 0, hours: int = 
     else:
         current_time = datetime.now()
         disabled_until = current_time + timedelta(minutes=mins, hours=hours, days=days)
-        disabled_until = disabled_until.strftime('%Y-%m-%d %H:%M:%S')
+        disabled_until = disabled_until.strftime(os.getenv('DATE_FORMAT'))
 
     # Database operations
     conn = sqlite3.connect(database)
@@ -269,6 +269,7 @@ async def score(interaction: discord.Interaction, song: str, user: discord.User 
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
+                print(data)
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 top_scores_message = get_top_scores(selected_row, interaction, 3)
                 embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
@@ -430,7 +431,7 @@ async def compare_logic(interaction: discord.Interaction, page: int, order, priv
 
 
 #================================================================================================
-# compare two users
+# Unplayed songs
 #================================================================================================
 
 @client.tree.command(name="unplayed", description="Returns a list of songs that you have not played.")
@@ -649,16 +650,31 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS SUBMISSIONS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS FAILS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT)''')
     conn.commit()
     conn.close()
 
 init_db()
+
+def update_db():
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+
+    c.execute("PRAGMA table_info(SUBMISSIONS)")
+    columns = [column[1] for column in c.fetchall()]
+    if 'date' not in columns:
+        c.execute('''ALTER TABLE SUBMISSIONS ADD COLUMN date TEXT''')
+        c.execute('''UPDATE SUBMISSIONS SET date = '01-01-1970 00:00' WHERE date IS NULL''')
+
+    conn.commit()
+    conn.close()
+
+update_db()
 
 
 #================================================================================================
@@ -835,7 +851,8 @@ def extract_data_from_row(row):
         'stepartist': row[9],
         'scatterplotData': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
         'lifebarInfo': json.loads(row[12].replace("'", '"') if row[12] else '[]'),
-        'worstWindow': row[13]
+        'worstWindow': row[13],
+        'date': row[14]
     }
 
 
@@ -845,7 +862,7 @@ def extract_data_from_row(row):
 
 def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.dark_grey()):
     
-    print(data.get('scatterplotData'))
+
 
     if data.get('scatterplotData') is None:
         embed = discord.Embed(title="Unable to recall score", color=color)
@@ -867,6 +884,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
     embed.add_field(name="Grade", value=mapped_grade, inline=True)
     embed.add_field(name="Length", value=data.get('length'), inline=True)
     embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
+    embed.add_field(name="Date played", value=data.get('date'), inline=True)
 
     # Create the scatter plot and save it as an image
     create_scatterplot_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='scatterplot.png')
@@ -1064,44 +1082,44 @@ def send_message():
 
         isPB = True
         c.execute('''UPDATE SUBMISSIONS
-                        SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?
+                        SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?
                         WHERE hash = ? AND userID = ?''',
-                    (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), data.get('hash'), user_id))
+                    (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), datetime.now().strftime(os.getenv('DATE_FORMAT')), data.get('hash'), user_id))
         conn.commit()
 
     elif new_ex_score > existing_ex_score and data.get('grade') != 'Grade_Failed':
 
         isPB = True
         
-        c.execute('''INSERT INTO SUBMISSIONS (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (user_id, data.get('songName'), data.get('artist'), data.get('pack'), data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'), data.get('length'), data.get('stepartist'), data.get('hash'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow')))
+        c.execute('''INSERT INTO SUBMISSIONS (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (user_id, data.get('songName'), data.get('artist'), data.get('pack'), data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'), data.get('length'), data.get('stepartist'), data.get('hash'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), datetime.now().strftime(os.getenv('DATE_FORMAT'))))
         conn.commit()
     
     elif existing_fails_entry and data.get('grade') == 'Grade_Failed' and new_ex_score > existing_fails_ex_score:
 
         c.execute('''UPDATE FAILS
-                    SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?
+                    SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?
                     WHERE hash = ? AND userID = ?''',
-                (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), data.get('hash'), user_id))
+                (data.get('itgScore'), new_ex_score, data.get('grade'), str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), datetime.now().strftime(os.getenv('DATE_FORMAT')), data.get('hash'), user_id))
         conn.commit()
     
     elif (not existing_fails_entry) and data.get('grade') == 'Grade_Failed':
 
         c.execute('''INSERT INTO FAILS (userID, songName, artist, pack,
-                  difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                  (user_id, data.get('songName'), data.get('artist'), data.get('pack'),
                   data.get('difficulty'), data.get('itgScore'), data.get('exScore'), data.get('grade'),
                   data.get('length'), data.get('stepartist'), data.get('hash'),
-                  str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow')))
+                  str(data.get('scatterplotData')), str(data.get('lifebarInfo')), data.get('worstWindow'), datetime.now().strftime(os.getenv('DATE_FORMAT'))))
         conn.commit()
 
 
     # Check if submit_disabled is a date and time and if it is past that time and date
     if submit_disabled != 'enabled' and submit_disabled != 'disabled':
         try:
-            disabled_until = datetime.strptime(submit_disabled, '%Y-%m-%d %H:%M:%S')
+            disabled_until = datetime.strptime(submit_disabled, os.getenv('DATE_FORMAT'))
             if datetime.now() > disabled_until:
                 submit_disabled = 'enabled'
                 conn = sqlite3.connect(database)
