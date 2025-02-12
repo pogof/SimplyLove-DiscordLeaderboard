@@ -917,6 +917,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
     embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
+    embed.add_field(name="Date played", value=data.get('date'), inline=False)
 
     judgements = {
             'fa_p': 0,
@@ -975,20 +976,34 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     WO:  {judgements['e_wo']+judgements['l_wo']} ({judgements['e_wo']}/{judgements['l_wo']})
                     Miss: {judgements['miss']}""", inline=True)
 
-    #TODO: Figure out if I can do anything with this lol
-    # y_values = [100-point['y'] for point in data.get('scatterplotData') if point['y'] not in [0, 200]]
 
-    # std_dev_3 = np.std(y_values) * 3
-    # print(std_dev_3)
-    # mean = np.mean(y_values)
-    # print(mean)
-    # mean_abs_error = np.mean([abs(mean - y) for y in y_values])
-    # print(mean_abs_error)
+    y_values = np.array([100 - point['y'] for point in data.get('scatterplotData') if point['y'] not in [0, 200]])
+    
+    worst_window = float(data.get('worstWindow'))
+    y_scaled = np.round(1000 * scale(y_values, -100, 100, -worst_window, worst_window), 1)
 
-    # max_error = max([abs(mean - y) for y in y_values])
-    # print(max_error)
+    max_error = np.round(np.max(np.abs(y_scaled)), 1)
+    mean = np.round(np.mean(y_scaled), 1)
+    std_dev_3 = np.round(np.std(y_scaled) * 3, 1)
+    mean_abs_error = np.round(np.sum(np.abs(y_scaled)) / len(y_scaled)) #NOTE: mean_abs error is directly reimplemented from Simply-Love-SM5/BGAnimations/ScreenEvaluation common/Panes/Pane5/default.lua
 
-    # embed.add_field(name="Graph stats", value="Hello", inline=True)
+
+    #TODO: Reimplement this from SimplyLove? I don't think it's necessary
+    # test = 0
+    # for y in y_values:
+    #     test += (y - mean) ** 2
+
+    # std_dev = np.round(np.sqrt(test / (len(y_values)-1)), 1)
+    # print("std dev: ", std_dev, "std dev * 3: ", std_dev * 3)
+
+    embed.add_field(name="Graph stats",
+                    value=f"""
+                    mean abs err: {mean_abs_error}ms
+                    mean: {mean}ms
+                    std dev*3: {std_dev_3}ms
+                    max error: {max_error}ms
+                    Note that the numbers are rounded differently then in SL.""",
+                    inline=True)
 
     create_distribution_from_json(data.get('scatterplotData'), data.get('worstWindow'), output_file='distribution.png')
     # Send the embed with the image attachment
