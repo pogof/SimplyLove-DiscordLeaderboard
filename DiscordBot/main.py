@@ -683,8 +683,46 @@ update_db()
 # Scatter plot generation
 #================================================================================================
 
-def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.png'):
+# def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.png'):
 
+#     # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
+#     x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
+#     y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
+#     colors = [point['color'] for point in data if point['y'] not in [0, 200]]
+    
+#     # Extract lifebarInfo data points
+#     lifebar_x_values = [point['x'] for point in lifebar_info]
+#     lifebar_y_values = [-200+point['y'] for point in lifebar_info]
+
+#     # Set plot size
+#     plt.figure(figsize=(10, 2))  # Size in inches (1000x200 pixels)
+
+#     # Add a horizontal line at y = -100 (center of judgement)
+#     plt.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
+
+#     # Add the step scatter points
+#     plt.scatter(x_values, y_values, c=colors, marker='s', s=5)
+    
+#     # Add vertical lines for all points with y=200 (misses)
+#     for point in data:
+#         if point['y'] == 200:
+#             vertical_line_color = point['color']
+#             plt.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
+    
+#     # Plot lifebarInfo as a continuous line
+#     plt.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
+
+#     # Set the x-axis limits to 0 to 1000
+#     plt.xlim(0, 1000)
+#     # Set the y-axis limits to -210 to 10
+#     plt.ylim(-210, 10) #TODO: Zoom based on worst judgement (excluding misses)
+#     plt.axis('off')
+#     plt.gca().set_facecolor('black')
+#     plt.gcf().patch.set_facecolor('black')
+#     plt.savefig(output_file, bbox_inches='tight', pad_inches=0)
+#     plt.close()
+
+def create_scatterplot_from_json(data, lifebar_info, output_file='scatterplot.png'):
     # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
     x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
     y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
@@ -692,35 +730,54 @@ def create_scatterplot_from_json(data, lifebar_info,  output_file='scatterplot.p
     
     # Extract lifebarInfo data points
     lifebar_x_values = [point['x'] for point in lifebar_info]
-    lifebar_y_values = [-200+point['y'] for point in lifebar_info]
+    lifebar_y_values = [-200 + point['y'] for point in lifebar_info]
 
     # Set plot size
-    plt.figure(figsize=(10, 2))  # Size in inches (1000x200 pixels)
+    fig, ax2 = plt.subplots(figsize=(10, 2))  # Size in inches (1000x200 pixels)
+
+    # Create a secondary axis for the density plot
+    ax1 = ax2.twinx()
+
+    # Create the density plot
+    x_dens = [point['x'] for point in data if point['y'] not in [0]]
+    density = np.histogram(x_dens, bins=40, density=True)
+    x_density = (density[1][1:] + density[1][:-1]) / 2
+    y_density = density[0]
+
+    # Plot the density plot
+    ax2.plot(x_density, y_density, color='white', alpha=0.0)
+    ax2.fill_between(x_density, y_density, color='cyan', alpha=0.2)  
+    ax2.axis('off')
+
 
     # Add a horizontal line at y = -100 (center of judgement)
-    plt.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
+    ax1.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
 
     # Add the step scatter points
-    plt.scatter(x_values, y_values, c=colors, marker='s', s=5)
+    ax1.scatter(x_values, y_values, c=colors, marker='s', s=5)
     
     # Add vertical lines for all points with y=200 (misses)
     for point in data:
         if point['y'] == 200:
             vertical_line_color = point['color']
-            plt.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
+            ax1.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
     
     # Plot lifebarInfo as a continuous line
-    plt.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
+    ax1.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
 
     # Set the x-axis limits to 0 to 1000
-    plt.xlim(0, 1000)
+    ax1.set_xlim(0, 1000)
     # Set the y-axis limits to -210 to 10
-    plt.ylim(-210, 10) #TODO: Zoom based on worst judgement (excluding misses)
-    plt.axis('off')
-    plt.gca().set_facecolor('black')
-    plt.gcf().patch.set_facecolor('black')
+    ax1.set_ylim(-210, 10)
+    ax1.axis('off')
+    ax1.set_facecolor('black')
+    fig.patch.set_facecolor('black')
+
+
+    # Save the plot as an image
     plt.savefig(output_file, bbox_inches='tight', pad_inches=0)
     plt.close()
+
 
 
 #================================================================================================
