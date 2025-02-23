@@ -650,32 +650,71 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS SUBMISSIONS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS FAILS
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS DOUBLES
+                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
+                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS DOUBLESFAILS
+                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
+                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
     conn.commit()
     conn.close()
 
 init_db()
 
+#INFO: Only for updating already existing database
 def update_db():
     conn = sqlite3.connect(database)
     c = conn.cursor()
 
+    # Check the columns in the SUBMISSIONS table
     c.execute("PRAGMA table_info(SUBMISSIONS)")
     columns = [column[1] for column in c.fetchall()]
+
+    # Add the 'date' column if it doesn't exist
     if 'date' not in columns:
         c.execute('''ALTER TABLE SUBMISSIONS ADD COLUMN date TEXT''')
         c.execute('''UPDATE SUBMISSIONS SET date = '01-01-1970 00:00' WHERE date IS NULL''')
+
+    # Add the 'mods' column if it doesn't exist
+    if 'mods' not in columns:
+        c.execute('''ALTER TABLE SUBMISSIONS ADD COLUMN mods TEXT''')
+
+    # Check the columns in the FAILS table
+    c.execute("PRAGMA table_info(FAILS)")
+    columns = [column[1] for column in c.fetchall()]
+
+    # Add the 'date' column if it doesn't exist
+    if 'date' not in columns:
+        c.execute('''ALTER TABLE FAILS ADD COLUMN date TEXT''')
+        c.execute('''UPDATE FAILS SET date = '01-01-1970 00:00' WHERE date IS NULL''')
+
+    # Add the 'mods' column if it doesn't exist
+    if 'mods' not in columns:
+        c.execute('''ALTER TABLE FAILS ADD COLUMN mods TEXT''')
+
+
 
     conn.commit()
     conn.close()
 
 update_db()
 
+
+    # c.execute("PRAGMA table_info(FAILS)")
+    # columns = [column[1] for column in c.fetchall()]
+    # if 'date' not in columns:
+    #     c.execute('''ALTER TABLE FAILS ADD COLUMN date TEXT''')
+    #     c.execute('''UPDATE FAILS SET date = '01-01-1970 00:00' WHERE date IS NULL''')
 
 #================================================================================================
 # Graph generation
