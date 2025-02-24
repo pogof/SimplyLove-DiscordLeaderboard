@@ -4,6 +4,22 @@ end
 
 --------------------------------------------------------------------------------------------------
 
+local function printTable(t, indent)
+    indent = indent or 0
+    local indentStr = string.rep("  ", indent)
+
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            debugPrint(indentStr .. tostring(k) .. ":")
+            printTable(v, indent + 1)
+        else
+            debugPrint(indentStr .. tostring(k) .. ": " .. tostring(v))
+        end
+    end
+end
+
+--------------------------------------------------------------------------------------------------
+
 local function readURLandKey(player)
 
     local pdir
@@ -240,41 +256,28 @@ local function SongResultData(player, apiKey, style)
         difficulty = GAMESTATE:GetCurrentSteps(player):GetMeter(),
         description = escapeString(GAMESTATE:GetCurrentSteps(player):GetDescription()),
         hash = tostring(SL[pn].Streams.Hash),
-        modifiers = ""
+        modifiers = CreateCommentString(player)
     }
-
-    --Song modifiers
-    local mods = SL[pn].ActiveModifiers
-    local modString = ""
-    for k, v in pairs(mods) do
-        if v then
-            modString = modString .. k .. ","
-        end
-    end
-    songInfo.modifiers = modString
-    SCREENMAN:SystemMessage(modString)
 
     -- Result Data
     local resultInfo = {
-        playerName = escapeString(GAMESTATE:GetPlayerDisplayName(player)),
+        -- playerName = escapeString(GAMESTATE:GetPlayerDisplayName(player)), -- unnecessary
         score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
     }
 
-    if GAMESTATE:IsCourseMode() then 
-        local scatterplotDataJson = ""
-    else
-        local scatterplotData, worst_window = getScatterplotData(player, 1000, 200)
-        local scatterplotDataJson = encode(scatterplotData)
-    end
 
+    local scatterplotData, worst_window = getScatterplotData(player, 1000, 200)
+    local scatterplotDataJson = encode(scatterplotData)
+    
     local lifebarInfo = GetLifebarData(player, 1000, 200)
     local lifebarInfoJson = encode(lifebarInfo)
 
+
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s","itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s", "isCourse": "%s"}',
+        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s","itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s"}',
         apiKey,
         songInfo.name,
         songInfo.artist,
@@ -290,15 +293,91 @@ local function SongResultData(player, apiKey, style)
         lifebarInfoJson,
         ("%.4f"):format(worst_window),
         style,
-        resultInfo.modifiers,
-        tostring(GAMESTATE:IsCourseMode())
+        songInfo.modifiers
         )
         
-    debugPrint("JSON Data: "..jsonData)    
+    --debugPrint("JSON Data: "..jsonData)    
 
     return jsonData
 
 end
+
+--------------------------------------------------------------------------------------------------
+
+
+
+
+local function CourseResultData(player, apiKey, style)
+    
+    local pn = ToEnumShortString(player)
+
+    local course = GAMESTATE:GetCurrentCourse()
+
+    --Course Data
+    local courseInfo = {
+        name   = escapeString(course:GetTranslitFullTitle()),
+        pack   = escapeString(course:GetGroupName()),
+        --length = string.format("%d:%02d", math.floor(course:GetTotalSeconds()/60), math.floor(course:GetTotalSeconds()%60)), -- returns nil lol
+        description = escapeString(course:GetDescription()),
+        entries = "[",
+        --type = tostring(course:getCourseType()), -- returns nil lol
+        hash = tostring(SL[pn].Streams.Hash),
+        scripter = escapeString(course:GetScripter()),
+        modifiers = CreateCommentString(player)
+    }
+
+    for i in ivalues(courseInfo.entries) do
+        courseInfo.entries = courseInfo.entries .. "{name = " .. escapeString(courseInfo.entries[i]:GetSong():GetTranslitFullTitle()) .. ", length = " .. courseInfo.entries[i]:GetSong():GetStepsSeconds() .. ", artist = " .. escapeString(courseInfo.entries[i]:GetSong():GetTranslitArtist()) .. "},"
+    end
+
+    -- Remove the last comma and append the closing bracket
+    if courseInfo.entries:sub(-1) == "," then
+        courseInfo.entries = courseInfo.entries:sub(1, -2)
+    end
+    courseInfo.entries = courseInfo.entries .. "]"
+
+
+    -- Result Data
+    local resultInfo = {
+        --playerName = escapeString(GAMESTATE:GetPlayerDisplayName(player)), -- unnecessary
+        score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
+        exscore = ("%.2f"):format(CalculateExScore(player)),
+        grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
+    }
+
+    
+    local lifebarInfo = GetLifebarData(player, 1000, 200) --table
+    local lifebarInfoJson = encode(lifebarInfo) --string
+
+
+    -- Prepare JSON data
+    local jsonData = string.format(
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "modifiers": "%s"}',
+        apiKey,
+        courseInfo.name,
+        courseInfo.pack,
+        --courseInfo.length,
+        courseInfo.entries,
+        --courseInfo.type,
+        courseInfo.hash,
+        courseInfo.scripter,
+        resultInfo.score,
+        resultInfo.exscore,
+        resultInfo.grade,
+        lifebarInfoJson,
+        style,
+        courseInfo.modifiers
+        )
+
+
+
+        
+    --debugPrint("JSON Data: "..jsonData)    
+
+    return jsonData
+
+end
+
 
 --------------------------------------------------------------------------------------------------
 
@@ -311,37 +390,67 @@ u["ScreenEvaluationStage"] = Def.Actor {
         local style = GAMESTATE:GetCurrentStyle():GetName()
         if style == "versus" then style = "single" end
 
-        local isCourse = GAMESTATE:IsCourseMode()
+        for player in ivalues(GAMESTATE:GetHumanPlayers()) do
+            local partValid, allValid = ValidForGrooveStats(player)
+            local botURL, apiKey = readURLandKey(player)
+            if allValid and botURL ~= nil and apiKey ~= nil then 
+                local data = SongResultData(player, apiKey, style)
+                sendData(data, botURL)
 
-        if not isCourse then
+            end
+            
+        end
 
+    end
+}
+
+
+u["ScreenEvaluationNonstop"] = Def.ActorFrame {
+    ModuleCommand=function(self)
+
+
+        local fixed = GAMESTATE:GetCurrentCourse():AllSongsAreFixed()
+        local autogen = GAMESTATE:GetCurrentCourse():IsAutogen()
+        local endless = GAMESTATE:GetCurrentCourse():IsEndless()
+
+        -- Would be kinda unfair
+        if fixed and not autogen and not endless then
+            
+            
+            -- single, versus, double
+            local style = GAMESTATE:GetCurrentStyle():GetName()
+            if style == "versus" then style = "single" end
+            
             for player in ivalues(GAMESTATE:GetHumanPlayers()) do
+                
+                
+                -- Doesn't return true for courses, but I can use everything else lol
                 local partValid, allValid = ValidForGrooveStats(player)
+
+                allValid = true
+                for i, valid in ipairs(partValid) do
+                    if i ~= 3 and not valid then
+                        allValid = false
+                        break
+                    end
+                end
+
+                
                 local botURL, apiKey = readURLandKey(player)
-                if allValid and botURL ~= nil and apiKey ~= nil then 
-                    local data = SongResultData(player, apiKey, style)
+                if allValid and botURL ~= nil and apiKey ~= nil then
+                    -- Different day different data
+                    local data = CourseResultData(player, apiKey, style)
                     sendData(data, botURL)
 
                 end
                 
-             end
+            end
         end
 
-        -- if isCourse then
-        --     for player in ivalues(GAMESTATE:GetHumanPlayers()) do
-        --         local partValid, allValid = ValidForGrooveStats(player)
-        --         local botURL, apiKey = readURLandKey(player)
-        --         if allValid and botURL ~= nil and apiKey ~= nil then 
-        --             local data = SongResultData(player, apiKey, style)
-        --             sendData(data, botURL)
-
-        --         end
-                
-        --      end
-        -- end
 
 
     end
 }
+
 
 return u
