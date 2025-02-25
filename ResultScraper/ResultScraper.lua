@@ -251,7 +251,7 @@ local function SongResultData(player, apiKey, style)
         name   = escapeString(song:GetTranslitFullTitle()),
         artist = escapeString(song:GetTranslitArtist()),
         pack   = escapeString(song:GetGroupName()),
-        length = string.format("%d:%02d", math.floor(song:GetStepsSeconds()/60), math.floor(song:GetStepsSeconds()%60)),
+        length = string.format("%d:%02d", math.floor(song:MusicLengthSeconds()/60), math.floor(song:MusicLengthSeconds()%60)),
         stepartist = escapeString(GAMESTATE:GetCurrentSteps(player):GetAuthorCredit()),
         difficulty = GAMESTATE:GetCurrentSteps(player):GetMeter(),
         description = escapeString(GAMESTATE:GetCurrentSteps(player):GetDescription()),
@@ -321,21 +321,32 @@ local function CourseResultData(player, apiKey, style)
         description = escapeString(course:GetDescription()),
         entries = "[",
         --type = tostring(course:getCourseType()), -- returns nil lol
-        hash = tostring(SL[pn].Streams.Hash),
+        hash = "" --escapeString(tostring(CRYPTMAN:SHA256File(course:GetCourseDir()))),
         scripter = escapeString(course:GetScripter()),
         modifiers = CreateCommentString(player)
     }
 
-    for i in ivalues(courseInfo.entries) do
-        courseInfo.entries = courseInfo.entries .. "{name = " .. escapeString(courseInfo.entries[i]:GetSong():GetTranslitFullTitle()) .. ", length = " .. courseInfo.entries[i]:GetSong():GetStepsSeconds() .. ", artist = " .. escapeString(courseInfo.entries[i]:GetSong():GetTranslitArtist()) .. "},"
-    end
 
+
+    local test = course:GetCourseEntries()
+
+    for i in ipairs(course:GetCourseEntries()) do
+        courseInfo.entries = courseInfo.entries .. "{name = " .. escapeString(course:GetCourseEntries()[i]:GetSong():GetTranslitFullTitle()) .. ", length = " .. course:GetCourseEntries()[i]:GetSong():MusicLengthSeconds() .. ", artist = " .. escapeString(course:GetCourseEntries()[i]:GetSong():GetTranslitArtist()) .. "},"
+    
+    end
+    
+    
+    
+    
     -- Remove the last comma and append the closing bracket
     if courseInfo.entries:sub(-1) == "," then
         courseInfo.entries = courseInfo.entries:sub(1, -2)
     end
     courseInfo.entries = courseInfo.entries .. "]"
-
+    
+    --SCREENMAN:SystemMessage(escapeString(course:GetCourseDir()))
+    --SCREENMAN:SystemMessage(escapeString(CRYPTMAN:SHA256File(course:GetCourseDir())))
+    --SCREENMAN:SystemMessage(escapeString(CRYPTMAN:SHA1String("test")))
 
     -- Result Data
     local resultInfo = {

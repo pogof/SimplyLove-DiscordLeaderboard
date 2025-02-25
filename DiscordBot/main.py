@@ -960,6 +960,7 @@ def send_message():
         ),
         client.loop
         )
+        print("Something is missing")
         return jsonify({'status': 'Request is missing some data field(s).'}), 400
     
     isPB = True
@@ -993,7 +994,7 @@ def send_message():
     
     if existing_entry and new_ex_score > existing_ex_score:
         if data.get('courseName'):
-            updateExisting = 'UDPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting,
                       (data.get('itgScore'), 
                        new_ex_score,
@@ -1006,7 +1007,7 @@ def send_message():
             conn.commit()
 
         else:
-            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ? length = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting, 
                       (data.get('itgScore'), 
                        new_ex_score,
@@ -1016,6 +1017,7 @@ def send_message():
                        data.get('worstWindow'), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
                        data.get('modifiers'),
+                       data.get('length'), # I was sending the wrong value lmao
                        data.get('hash'),
                        user_id))
             conn.commit()
