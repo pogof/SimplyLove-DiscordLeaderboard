@@ -11,47 +11,57 @@ from library import *
 #================================================================================================
 
 def create_scatterplot_from_json(data, lifebar_info, output_file='scatterplot.png'):
-    # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
-    x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
-    y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
-    colors = [point['color'] for point in data if point['y'] not in [0, 200]]
-    
-    # Extract lifebarInfo data points
-    lifebar_x_values = [point['x'] for point in lifebar_info]
-    lifebar_y_values = [-200 + point['y'] for point in lifebar_info]
 
     # Set plot size
     fig, ax2 = plt.subplots(figsize=(10, 2))  # Size in inches (1000x200 pixels)
+    ax2.axis('off')
 
     # Create a secondary axis for the density plot
     ax1 = ax2.twinx()
 
-    # Create the density plot
-    x_dens = [point['x'] for point in data if point['y'] not in [0]]
-    density = np.histogram(x_dens, bins=40, density=True)
-    x_density = (density[1][1:] + density[1][:-1]) / 2
-    y_density = density[0]
-
-    # Plot the density plot
-    ax2.plot(x_density, y_density, color='white', alpha=0.0)
-    ax2.fill_between(x_density, y_density, color='cyan', alpha=0.2)  
-    ax2.axis('off')
-
-
     # Add a horizontal line at y = -100 (center of judgement)
     ax1.axhline(y=-100, color='white', linestyle='-', alpha=0.3, linewidth=2)
 
-    # Add the step scatter points
-    ax1.scatter(x_values, y_values, c=colors, marker='s', s=5)
+    if data is not None:
+        # Extract x, y, and color values, excluding points with y=0 or y=200 (misses)
+        x_values = [point['x'] for point in data if point['y'] not in [0, 200]]
+        y_values = [-point['y'] for point in data if point['y'] not in [0, 200]]
+        colors = [point['color'] for point in data if point['y'] not in [0, 200]]
+        
+        # Create the density plot
+        x_dens = [point['x'] for point in data if point['y'] not in [0]]
+        density = np.histogram(x_dens, bins=40, density=True)
+        x_density = (density[1][1:] + density[1][:-1]) / 2
+        y_density = density[0]
+
+        # Plot the density plot
+        ax2.plot(x_density, y_density, color='white', alpha=0.0)
+        ax2.fill_between(x_density, y_density, color='cyan', alpha=0.2)  
+        
+
+
+
+        # Add the step scatter points
+        ax1.scatter(x_values, y_values, c=colors, marker='s', s=5)
+        
+        # Add vertical lines for all points with y=200 (misses)
+        for point in data:
+            if point['y'] == 200:
+                vertical_line_color = point['color']
+                ax1.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
     
-    # Add vertical lines for all points with y=200 (misses)
-    for point in data:
-        if point['y'] == 200:
-            vertical_line_color = point['color']
-            ax1.axvline(x=point['x'], color=vertical_line_color, linestyle='-')
-    
+
+    # Extract lifebarInfo data points
+    lifebar_x_values = [point['x'] for point in lifebar_info]
+    lifebar_y_values = [-200 + point['y'] for point in lifebar_info]
+
     # Plot lifebarInfo as a continuous line
     ax1.plot(lifebar_x_values, lifebar_y_values, color='white', linestyle='-', linewidth=2)
+
+    if data is None:
+        # Fill under the lifebar curve
+        ax1.fill_between(lifebar_x_values, lifebar_y_values, -210, color='cyan', alpha=0.2)
+
 
     # Set the x-axis limits to 0 to 1000
     ax1.set_xlim(0, 1000)

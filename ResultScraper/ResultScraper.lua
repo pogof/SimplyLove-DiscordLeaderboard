@@ -246,7 +246,7 @@ local function SongResultData(player, apiKey, style)
 
     local song = GAMESTATE:GetCurrentSong()
 
-    --Song Data
+    -- Song Data
     local songInfo = {
         name   = escapeString(song:GetTranslitFullTitle()),
         artist = escapeString(song:GetTranslitArtist()),
@@ -277,7 +277,7 @@ local function SongResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s","itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s"}',
+        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s"}',
         apiKey,
         songInfo.name,
         songInfo.artist,
@@ -285,6 +285,7 @@ local function SongResultData(player, apiKey, style)
         songInfo.length,
         songInfo.stepartist,
         songInfo.difficulty,
+        songInfo.description,
         resultInfo.score,
         resultInfo.exscore,
         resultInfo.grade,
@@ -312,41 +313,33 @@ local function CourseResultData(player, apiKey, style)
     local pn = ToEnumShortString(player)
 
     local course = GAMESTATE:GetCurrentCourse()
+    local trail = GAMESTATE:GetCurrentTrail(player)
 
-    --Course Data
+    SCREENMAN:SystemMessage(trail:GetMeter())
+
+    -- Course Data
     local courseInfo = {
         name   = escapeString(course:GetTranslitFullTitle()),
         pack   = escapeString(course:GetGroupName()),
-        --length = string.format("%d:%02d", math.floor(course:GetTotalSeconds()/60), math.floor(course:GetTotalSeconds()%60)), -- returns nil lol
+        difficulty = trail:GetMeter(),
         description = escapeString(course:GetDescription()),
         entries = "[",
-        --type = tostring(course:getCourseType()), -- returns nil lol
-        hash = "" --escapeString(tostring(CRYPTMAN:SHA256File(course:GetCourseDir()))),
+        hash = BinaryToHex(CRYPTMAN:SHA1File(course:GetCourseDir())):sub(1, 16),
         scripter = escapeString(course:GetScripter()),
         modifiers = CreateCommentString(player)
     }
 
 
-
-    local test = course:GetCourseEntries()
-
-    for i in ipairs(course:GetCourseEntries()) do
-        courseInfo.entries = courseInfo.entries .. "{name = " .. escapeString(course:GetCourseEntries()[i]:GetSong():GetTranslitFullTitle()) .. ", length = " .. course:GetCourseEntries()[i]:GetSong():MusicLengthSeconds() .. ", artist = " .. escapeString(course:GetCourseEntries()[i]:GetSong():GetTranslitArtist()) .. "},"
-    
+    local trailSteps = trail:GetTrailEntries()
+    for i in ipairs(trailSteps) do
+        courseInfo.entries = courseInfo.entries .. "{name: " .. escapeString(trailSteps[i]:GetSong():GetTranslitFullTitle()) .. ", length: " .. trailSteps[i]:GetSong():MusicLengthSeconds() .. ", artist: " .. escapeString(trailSteps[i]:GetSong():GetTranslitArtist()) .. ", difficulty:  " .. trailSteps[i]:GetSteps():GetMeter() .. "}," -- ", difficulty = " .. trailSteps:GetSteps():GetMeter() ..
     end
-    
-    
-    
-    
     -- Remove the last comma and append the closing bracket
     if courseInfo.entries:sub(-1) == "," then
         courseInfo.entries = courseInfo.entries:sub(1, -2)
     end
     courseInfo.entries = courseInfo.entries .. "]"
     
-    --SCREENMAN:SystemMessage(escapeString(course:GetCourseDir()))
-    --SCREENMAN:SystemMessage(escapeString(CRYPTMAN:SHA256File(course:GetCourseDir())))
-    --SCREENMAN:SystemMessage(escapeString(CRYPTMAN:SHA1String("test")))
 
     -- Result Data
     local resultInfo = {
@@ -363,15 +356,15 @@ local function CourseResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "modifiers": "%s"}',
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "modifiers": "%s"}',
         apiKey,
         courseInfo.name,
         courseInfo.pack,
-        --courseInfo.length,
         courseInfo.entries,
-        --courseInfo.type,
         courseInfo.hash,
         courseInfo.scripter,
+        courseInfo.difficulty,
+        courseInfo.description,
         resultInfo.score,
         resultInfo.exscore,
         resultInfo.grade,
@@ -383,7 +376,7 @@ local function CourseResultData(player, apiKey, style)
 
 
         
-    --debugPrint("JSON Data: "..jsonData)    
+--     --debugPrint("JSON Data: "..jsonData)    
 
     return jsonData
 
@@ -418,8 +411,7 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
 u["ScreenEvaluationNonstop"] = Def.ActorFrame {
     ModuleCommand=function(self)
-
-
+        
         local fixed = GAMESTATE:GetCurrentCourse():AllSongsAreFixed()
         local autogen = GAMESTATE:GetCurrentCourse():IsAutogen()
         local endless = GAMESTATE:GetCurrentCourse():IsEndless()

@@ -78,5 +78,25 @@ def extract_data_from_row(row):
         'scatterplotData': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
         'lifebarInfo': json.loads(row[12].replace("'", '"') if row[12] else '[]'),
         'worstWindow': row[13],
-        'date': row[14]
+        'date': row[14],
+        'mods': row[15],
+        'prevBestEx': row[17]
+    }
+
+def extract_course_data_from_row(row):
+    return {
+        'courseName': row[1],
+        'pack': row[2],
+        'entries': row[3],
+        'scripter': row[4],
+        'difficulty': row[5],
+        'description': row[6],
+        'itgScore': row[7],
+        'exScore': row[8],
+        'grade': row[9],
+        'hash': row[10],
+        'lifebarInfo': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
+        'date': row[12],
+        'mods': row[13],
+        'prevBestEx': row[14]
     }

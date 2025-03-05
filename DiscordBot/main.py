@@ -8,10 +8,7 @@ import secrets
 from flask import Flask, request, jsonify
 import threading
 import asyncio
-#import matplotlib.pyplot as plt
 import numpy as np
-#import seaborn as sns
-#import json
 import os
 from dotenv import load_dotenv
 
@@ -214,7 +211,7 @@ async def enable(interaction: discord.Interaction):
 #================================================================================================
 
 @client.tree.command(name="score", description="Recall score result from database.")
-async def score(interaction: discord.Interaction, song: str, isdouble: bool = False, iscourse: bool = False,  user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+async def score(interaction: discord.Interaction, song: str, isdouble: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return
@@ -222,8 +219,6 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 
 
     tableType = ''
-    if iscourse:
-        tableType += 'COURSES'
     if isdouble:
         tableType += 'DOUBLES'
     else:
@@ -280,6 +275,10 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
+
+                if isdouble:
+                    data['style'] = 'double'
+
                 #print(data)
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
@@ -296,6 +295,9 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
+
+        if isdouble:
+            data['style'] = 'double'
         embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
         top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
@@ -303,6 +305,103 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
+#================================================================================================
+# Recall course result
+#================================================================================================
+
+@client.tree.command(name="course", description="Recall course result from database.")
+async def course(interaction: discord.Interaction, song: str, isdouble: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+    if interaction.guild is None:
+        await interaction.response.send_message("This command can only be used in a server.")
+        return
+    
+
+
+    tableType = 'COURSES'
+    if isdouble:
+        tableType += 'DOUBLES'
+    else:
+        tableType += 'SINGLES'
+    if failed:
+        tableType += 'FAILS'
+    
+    query = 'SELECT * FROM ' + tableType + ' WHERE 1=1'
+
+    params = []
+
+    if song:
+        query += " AND courseName LIKE ?"
+        params.append(f"%{song}%")
+    if user:
+        query += " AND userID = ?"
+        params.append(str(user.id))
+    if user is None:
+        query += " AND userID = ?"
+        params.append(str(interaction.user.id))
+        user = interaction.user
+    if difficulty:
+        query += " AND difficulty = ?"
+        params.append(str(difficulty))
+    if pack:
+        query += " AND pack LIKE ?"
+        params.append(f"%{pack}%")
+
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute(query, params)
+    results = c.fetchall()
+    conn.close()
+
+    if not results:
+        await interaction.response.send_message("No scores found matching the criteria.", ephemeral=private)
+        return
+
+    if len(results) > 1:
+        options = [
+            discord.SelectOption(
+                label=f"{row[1]} - {row[2]} [{row[4]}]",
+                description=f" EX Score: {row[6]}%, Pack: {row[3]}",
+                value=str(index)
+            )
+            for index, row in enumerate(results)
+        ]
+
+        class ScoreSelect(discord.ui.Select):
+            def __init__(self):
+                super().__init__(placeholder="Choose a score...", options=options)
+
+            async def callback(self, interaction: discord.Interaction):
+                selected_index = int(self.values[0])
+                selected_row = results[selected_index]
+                data = extract_course_data_from_row(selected_row)
+
+                if isdouble:
+                    data['style'] = 'double'
+
+                #print(data)
+                embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
+                top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
+                embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
+                
+                #TODO: It worked without deleting the message, at least for a little while :(
+                #Need to figure something out lol
+                await interaction.message.delete()
+                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+
+        view = discord.ui.View()
+        view.add_item(ScoreSelect())
+        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=private)
+    else:
+        selected_row = results[0]
+        data = extract_course_data_from_row(selected_row)
+        if isdouble:
+            data['style'] = 'double'
+        embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
+
+        top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
+        embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
+
+        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
 #================================================================================================
 # compare two users
@@ -673,45 +772,21 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS
                  (serverID TEXT, channelID TEXT, PRIMARY KEY (serverID, channelID))''')
     
-    c.execute('''CREATE TABLE IF NOT EXISTS SINGLES
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
+    tablesNormal = ['SINGLES', 'SINGLESFAILS', 'DOUBLES', 'DOUBLESFAILS']
+    tablesCourses = ['COURSESSINGLES', 'COURSESSINGLESFAILS', 'COURSESDOUBLES', 'COURSESDOUBLESFAILS']
 
-    c.execute('''CREATE TABLE IF NOT EXISTS SINGLESFAILS
+    for table in tablesNormal:
+        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx TEXT)''')
     
-    c.execute('''CREATE TABLE IF NOT EXISTS DOUBLES
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS DOUBLESFAILS
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS COURSESSINGLES
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS COURSESSINGLESFAILS
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS COURSESDOUBLES
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS COURSESDOUBLESFAILS
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT)''')
+    for table in tablesCourses:
+        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
+                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty TEXT,
+                  description TEXT, itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
+                  life JSON, date TEXT, mods TEXT, prevBestEx TEXT)''')
+
 
 
     conn.commit()
@@ -726,42 +801,70 @@ init_db()
 
 def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.dark_grey()):
     
+    if data.get('prevBestEx') is None:
+        data['prevBestEx'] = 0
+
+    if data.get('songName'):
+        if data.get('scatterplotData') is None:
+            embed = discord.Embed(title="Unable to recall score", color=color)
+            embed.add_field(name="Error", value="Required data were not collected for old scores. If you want to recall then get better score :P", inline=False)
+            file = discord.File('lmao2.gif', filename='lmao2.gif')
+            embed.set_image(url="attachment://lmao2.gif")
+            return embed, file
+
+        if data.get('style') == 'double':
+            style = 'D'
+        else:
+            style = 'S'
 
 
-    if data.get('scatterplotData') is None:
-        embed = discord.Embed(title="Unable to recall score", color=color)
-        embed.add_field(name="Error", value="Required data were not collected for old scores. If you want to recall then get better score :P", inline=False)
-        file = discord.File('lmao2.gif', filename='lmao2.gif')
-        embed.set_image(url="attachment://lmao2.gif")
-        return embed, file
+        grade = data.get('grade')
+        mapped_grade = grade_mapping.get(grade, grade)
+        embed = discord.Embed(title=title, color=color)
+        embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
+        embed.add_field(name="Song", value=data.get('songName'), inline=True)
+        embed.add_field(name="Artist", value=data.get('artist'), inline=True)
+        embed.add_field(name="Pack", value=data.get('pack'), inline=True)
+        embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
+        embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
+        upscore = float(data.get('exScore')) - float(data.get('prevBestEx'))
+        embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
+        embed.add_field(name="Grade", value=mapped_grade, inline=True)
+        embed.add_field(name="Length", value=data.get('length'), inline=True)
+        embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
+        embed.add_field(name="Date played", value=data.get('date'), inline=True)
+        embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
-    if data.get('style') == 'doubles':
-        style = 'D'
+        # Create the scatter plot and save it as an image
+        create_scatterplot_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='scatterplot.png')
+
+        # Send the embed with the image attachment
+        file = discord.File('scatterplot.png', filename='scatterplot.png')
+        embed.set_image(url="attachment://scatterplot.png")
+    
     else:
-        style = 'S'
-
-
-    grade = data.get('grade')
-    mapped_grade = grade_mapping.get(grade, grade)
-    embed = discord.Embed(title=title, color=color)
-    embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
-    embed.add_field(name="Song", value=data.get('songName'), inline=True)
-    embed.add_field(name="Artist", value=data.get('artist'), inline=True)
-    embed.add_field(name="Pack", value=data.get('pack'), inline=True)
-    embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
-    embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
-    embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
-    embed.add_field(name="Grade", value=mapped_grade, inline=True)
-    embed.add_field(name="Length", value=data.get('length'), inline=True)
-    embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
-    embed.add_field(name="Date played", value=data.get('date'), inline=True)
-
-    # Create the scatter plot and save it as an image
-    create_scatterplot_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='scatterplot.png')
-
-    # Send the embed with the image attachment
-    file = discord.File('scatterplot.png', filename='scatterplot.png')
-    embed.set_image(url="attachment://scatterplot.png")
+        if data.get('style') == 'double':
+            style = 'D'
+        else:
+            style = 'S'
+        grade = data.get('grade')
+        mapped_grade = grade_mapping.get(grade, grade)
+        embed = discord.Embed(title=title, color=color)
+        embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
+        embed.add_field(name="Course", value=data.get('courseName'), inline=True)
+        embed.add_field(name="Scripter", value=data.get('scripter'), inline=True)
+        embed.add_field(name="Pack", value=data.get('pack'), inline=True)
+        embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
+        embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
+        upscore = float(data.get('exScore')) - float(data.get('prevBestEx'))
+        embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
+        embed.add_field(name="Grade", value=mapped_grade, inline=True)
+        embed.add_field(name="Date played", value=data.get('date'), inline=True)
+        embed.add_field(name="Mods", value=data.get('mods'), inline=True)
+        
+        create_scatterplot_from_json(None, data.get('lifebarInfo'), output_file='scatterplot.png')
+        file = discord.File('scatterplot.png', filename='scatterplot.png')
+        embed.set_image(url="attachment://scatterplot.png")
 
     return embed, file
 
@@ -940,13 +1043,13 @@ def send_message():
 
     # Check if the request contains all required data
     required_keys_song = [
-        'songName', 'artist', 'pack', 'length', 'stepartist', 'difficulty',
+        'songName', 'artist', 'pack', 'length', 'stepartist', 'difficulty', 'description',
         'itgScore', 'exScore', 'grade', 'hash', 'scatterplotData', 'lifebarInfo',
         'worstWindow', 'style', 'modifiers'
     ]
     required_keys_course = [
-        'courseName', 'pack', 'entries', 'hash', 'scripter', 'itgScore',
-        'exScore', 'grade', 'lifebarInfo', 'style', 'modifiers'
+        'courseName', 'pack', 'entries', 'hash', 'scripter', 'itgScore', 'description',
+        'exScore', 'grade', 'lifebarInfo', 'style', 'modifiers', 'difficulty'
     ]
 
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
@@ -994,7 +1097,7 @@ def send_message():
     
     if existing_entry and new_ex_score > existing_ex_score:
         if data.get('courseName'):
-            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ?, prevBestEx = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting,
                       (data.get('itgScore'), 
                        new_ex_score,
@@ -1002,12 +1105,13 @@ def send_message():
                        str(data.get('lifebarInfo')), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
                        data.get('modifiers'),
+                       new_ex_score-existing_ex_score,
                        data.get('hash'),
                        user_id))
             conn.commit()
 
         else:
-            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ? length = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ?, length = ?, prevBestEx = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting, 
                       (data.get('itgScore'), 
                        new_ex_score,
@@ -1018,6 +1122,7 @@ def send_message():
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
                        data.get('modifiers'),
                        data.get('length'), # I was sending the wrong value lmao
+                       new_ex_score-existing_ex_score,
                        data.get('hash'),
                        user_id))
             conn.commit()
@@ -1025,7 +1130,7 @@ def send_message():
 
     elif new_ex_score > existing_ex_score:
         if data.get('courseName'):
-            insertNew = 'INSERT INTO ' + tableType + ' (userID, courseName, pack, entries, scripter, itgScore, exScore, grade, hash, life, date, mods) VALUES (?,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,?)'
+            insertNew = 'INSERT INTO ' + tableType + ' (userID, courseName, pack, entries, scripter, itgScore, exScore, grade, hash, life, date, mods, difficulty, description, prevBestEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             c.execute(insertNew,
                       (user_id, 
                        data.get('courseName'), 
@@ -1038,10 +1143,14 @@ def send_message():
                        data.get('hash'), 
                        str(data.get('lifebarInfo')), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers')))
+                       data.get('modifiers'),
+                       data.get('difficulty'),
+                       data.get('description'),
+                       '0'))
+                       
             conn.commit()
         else:
-            insertNew = 'INSERT INTO ' + tableType + ' (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date, mods) VALUES (?,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,? ,?)'
+            insertNew = 'INSERT INTO ' + tableType + ' (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date, mods, description, prevBestEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             c.execute(insertNew,
                       (user_id, 
                        data.get('songName'), 
@@ -1058,7 +1167,9 @@ def send_message():
                        str(data.get('lifebarInfo')), 
                        data.get('worstWindow'), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers')))
+                       data.get('modifiers'),
+                       data.get('description'),
+                       '0'))
             conn.commit()
     else:
         isPB = False
