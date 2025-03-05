@@ -827,7 +827,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
         embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
         embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
-        upscore = float(data.get('exScore')) - float(data.get('prevBestEx'))
+        upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
         embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
         embed.add_field(name="Grade", value=mapped_grade, inline=True)
         embed.add_field(name="Length", value=data.get('length'), inline=True)
@@ -856,7 +856,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
         embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
         embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
-        upscore = float(data.get('exScore')) - float(data.get('prevBestEx'))
+        upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
         embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
         embed.add_field(name="Grade", value=mapped_grade, inline=True)
         embed.add_field(name="Date played", value=data.get('date'), inline=True)
@@ -1105,7 +1105,7 @@ def send_message():
                        str(data.get('lifebarInfo')), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
                        data.get('modifiers'),
-                       new_ex_score-existing_ex_score,
+                       existing_ex_score,
                        data.get('hash'),
                        user_id))
             conn.commit()
@@ -1122,7 +1122,7 @@ def send_message():
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
                        data.get('modifiers'),
                        data.get('length'), # I was sending the wrong value lmao
-                       new_ex_score-existing_ex_score,
+                       existing_ex_score,
                        data.get('hash'),
                        user_id))
             conn.commit()
@@ -1204,6 +1204,7 @@ def send_message():
                     #print(f"Sending message to channel: {channel.name} (ID: {channel_id}) in guild: {guild.name}")
                     
                     data['date'] = datetime.now().strftime(os.getenv('DATE_FORMAT'))
+                    data['prevBestEx'] = existing_ex_score
                     
                     if data.get('courseName'):
                         color = discord.Color.purple()
