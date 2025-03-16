@@ -76,7 +76,7 @@ async def help(Interaction: discord.Interaction):
 #================================================================================================
 
 @client.tree.command(name="usethischannel", description="(Un)Set the current channel as the results channel. (Admin only)")
-@commands.has_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
 async def usethischannel(Interaction: discord.Interaction):
     if Interaction.guild is None:
         await Interaction.response.send_message("This command can only be used in a server.")
@@ -102,8 +102,8 @@ async def usethischannel(Interaction: discord.Interaction):
         await Interaction.response.send_message(f"An error occurred: {e}")
 
 @usethischannel.error
-async def usethischannel_error(Interaction: discord.Interaction, error: commands.CommandError):
-    if isinstance(error, commands.MissingPermissions):
+async def usethischannel_error(Interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.MissingPermissions):
         await Interaction.response.send_message("You do not have the required permissions to use this command.", ephemeral=True)
     else:
         await Interaction.response.send_message("An error occurred while trying to run this command.", ephemeral=True)
