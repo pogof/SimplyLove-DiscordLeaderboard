@@ -238,6 +238,24 @@ local function getScatterplotData(player, GraphWidth, GraphHeight)
     return scatterplotData, worst_window
 end
 
+
+local function getRadar(player)
+
+    local pss = STATSMAN:GetCurStageStats():GetPlayerStageStats(player)
+    local RadarCategories = { 'Hands', 'Holds', 'Mines', 'Rolls' }
+    
+    local radarValues = {}
+
+    for i, RCType in ipairs(RadarCategories) do
+        radarValues[RCType] = {}
+        radarValues[RCType][1] = pss:GetRadarActual():GetValue( "RadarCategory_"..RCType )
+        radarValues[RCType][2] = pss:GetRadarPossible():GetValue( "RadarCategory_"..RCType )
+        radarValues[RCType][2] = clamp(radarValues[RCType][2], 0, 999)
+    end
+
+    return radarValues
+end
+
 --------------------------------------------------------------------------------------------------
 
 local function SongResultData(player, apiKey, style)
@@ -265,6 +283,7 @@ local function SongResultData(player, apiKey, style)
         score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
+        radar = getRadar(player),
     }
 
 
@@ -277,7 +296,7 @@ local function SongResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s"}',
+        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "modifiers": "%s", "radar": %s}',
         apiKey,
         songInfo.name,
         songInfo.artist,
@@ -294,7 +313,8 @@ local function SongResultData(player, apiKey, style)
         lifebarInfoJson,
         ("%.4f"):format(worst_window),
         style,
-        songInfo.modifiers
+        songInfo.modifiers,
+        encode(resultInfo.radar)
         )
         
     --debugPrint("JSON Data: "..jsonData)    
@@ -315,7 +335,7 @@ local function CourseResultData(player, apiKey, style)
     local course = GAMESTATE:GetCurrentCourse()
     local trail = GAMESTATE:GetCurrentTrail(player)
 
-    SCREENMAN:SystemMessage(trail:GetMeter())
+    
 
     -- Course Data
     local courseInfo = {
@@ -347,6 +367,7 @@ local function CourseResultData(player, apiKey, style)
         score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
+        radar = getRadar(player),
     }
 
     
@@ -356,7 +377,7 @@ local function CourseResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "modifiers": "%s"}',
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "modifiers": "%s", "radar": %s}',
         apiKey,
         courseInfo.name,
         courseInfo.pack,
@@ -370,7 +391,8 @@ local function CourseResultData(player, apiKey, style)
         resultInfo.grade,
         lifebarInfoJson,
         style,
-        courseInfo.modifiers
+        courseInfo.modifiers,
+        encode(resultInfo.radar)
         )
 
 
@@ -390,14 +412,16 @@ local u = {}
 u["ScreenEvaluationStage"] = Def.Actor {
     ModuleCommand = function(self)
 
+        
         -- single, versus, double
         local style = GAMESTATE:GetCurrentStyle():GetName()
         if style == "versus" then style = "single" end
-
+        
         for player in ivalues(GAMESTATE:GetHumanPlayers()) do
             local partValid, allValid = ValidForGrooveStats(player)
             local botURL, apiKey = readURLandKey(player)
             if allValid and botURL ~= nil and apiKey ~= nil then 
+                SCREENMAN:SystemMessage("ModuleCommand")
                 local data = SongResultData(player, apiKey, style)
                 sendData(data, botURL)
 
