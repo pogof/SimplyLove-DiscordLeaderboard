@@ -407,14 +407,16 @@ local u = {}
 u["ScreenEvaluationStage"] = Def.Actor {
     ModuleCommand = function(self)
 
+        
         -- single, versus, double
         local style = GAMESTATE:GetCurrentStyle():GetName()
         if style == "versus" then style = "single" end
-
+        
         for player in ivalues(GAMESTATE:GetHumanPlayers()) do
             local partValid, allValid = ValidForGrooveStats(player)
             local botURL, apiKey = readURLandKey(player)
             if allValid and botURL ~= nil and apiKey ~= nil then 
+                SCREENMAN:SystemMessage("ModuleCommand")
                 local data = SongResultData(player, apiKey, style)
                 sendData(data, botURL)
 
