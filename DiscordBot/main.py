@@ -216,8 +216,6 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         await interaction.response.send_message("This command can only be used in a server.")
         return
     
-
-
     tableType = ''
     if isdouble:
         tableType += 'DOUBLES'
@@ -779,13 +777,13 @@ def init_db():
         c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
                   itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx TEXT)''')
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx TEXT, radar JSON)''')
     
     for table in tablesCourses:
         c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
                  (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty TEXT,
                   description TEXT, itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT, prevBestEx TEXT)''')
+                  life JSON, date TEXT, mods TEXT, prevBestEx TEXT, radar JSON)''')
 
 
 
@@ -1045,11 +1043,11 @@ def send_message():
     required_keys_song = [
         'songName', 'artist', 'pack', 'length', 'stepartist', 'difficulty', 'description',
         'itgScore', 'exScore', 'grade', 'hash', 'scatterplotData', 'lifebarInfo',
-        'worstWindow', 'style', 'modifiers'
+        'worstWindow', 'style', 'mods', 'radar'
     ]
     required_keys_course = [
         'courseName', 'pack', 'entries', 'hash', 'scripter', 'itgScore', 'description',
-        'exScore', 'grade', 'lifebarInfo', 'style', 'modifiers', 'difficulty'
+        'exScore', 'grade', 'lifebarInfo', 'style', 'mods', 'difficulty', 'radar'
     ]
 
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
@@ -1097,21 +1095,22 @@ def send_message():
     
     if existing_entry and new_ex_score > existing_ex_score:
         if data.get('courseName'):
-            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ?, prevBestEx = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, life = ?, date = ?, mods = ?, prevBestEx = ?, radar = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting,
                       (data.get('itgScore'), 
                        new_ex_score,
                        data.get('grade'), 
                        str(data.get('lifebarInfo')), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers'),
+                       data.get('mods'),
                        existing_ex_score,
+                       str(data.get('radar')),
                        data.get('hash'),
                        user_id))
             conn.commit()
 
         else:
-            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ?, length = ?, prevBestEx = ? WHERE hash = ? AND userID = ?'
+            updateExisting = 'UPDATE ' + tableType + ' SET itgScore = ?, exScore = ?, grade = ?, scatter = ?, life = ?, worstWindow = ?, date = ?, mods = ?, length = ?, prevBestEx = ?, radar = ? WHERE hash = ? AND userID = ?'
             c.execute(updateExisting, 
                       (data.get('itgScore'), 
                        new_ex_score,
@@ -1120,9 +1119,10 @@ def send_message():
                        str(data.get('lifebarInfo')), 
                        data.get('worstWindow'), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers'),
+                       data.get('mods'),
                        data.get('length'), # I was sending the wrong value lmao
                        existing_ex_score,
+                       str(data.get('radar')),
                        data.get('hash'),
                        user_id))
             conn.commit()
@@ -1130,7 +1130,7 @@ def send_message():
 
     elif new_ex_score > existing_ex_score:
         if data.get('courseName'):
-            insertNew = 'INSERT INTO ' + tableType + ' (userID, courseName, pack, entries, scripter, itgScore, exScore, grade, hash, life, date, mods, difficulty, description, prevBestEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            insertNew = 'INSERT INTO ' + tableType + ' (userID, courseName, pack, entries, scripter, itgScore, exScore, grade, hash, life, date, mods, difficulty, description, prevBestEx, radar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             c.execute(insertNew,
                       (user_id, 
                        data.get('courseName'), 
@@ -1143,14 +1143,16 @@ def send_message():
                        data.get('hash'), 
                        str(data.get('lifebarInfo')), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers'),
+                       data.get('mods'),
                        data.get('difficulty'),
                        data.get('description'),
-                       '0'))
+                       '0',
+                       str(data.get('radar'))
+                       ))
                        
             conn.commit()
         else:
-            insertNew = 'INSERT INTO ' + tableType + ' (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date, mods, description, prevBestEx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            insertNew = 'INSERT INTO ' + tableType + ' (userID, songName, artist, pack, difficulty, itgScore, exScore, grade, length, stepartist, hash, scatter, life, worstWindow, date, mods, description, prevBestEx, radar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             c.execute(insertNew,
                       (user_id, 
                        data.get('songName'), 
@@ -1167,9 +1169,12 @@ def send_message():
                        str(data.get('lifebarInfo')), 
                        data.get('worstWindow'), 
                        datetime.now().strftime(os.getenv('DATE_FORMAT')),
-                       data.get('modifiers'),
+                       data.get('mods'),
                        data.get('description'),
-                       '0'))
+                       '0',
+                       str(data.get('radar'))
+                       ))
+            
             conn.commit()
     else:
         isPB = False
@@ -1212,6 +1217,8 @@ def send_message():
                         color = discord.Color.blue()
                     else:
                         color = discord.Color.green()
+
+                    
 
                     embed, file = embedded_score(data, user_id, "New (Server) Personal Best!", color)
                     #embed.set_image(url="attachment://scatterplot.png")
