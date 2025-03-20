@@ -238,7 +238,11 @@ local function getScatterplotData(player, GraphWidth, GraphHeight)
     return scatterplotData, worst_window
 end
 
+--------------------------------------------------------------------------------------------------
 
+-- Im only interested in what affects EX score, which should be just Holds, Rolls and Mines
+-- Hands I guess are a separate thing, but might as well include them lol
+-- Not interested in other Tech notation (at least for now lol)
 local function getRadar(player)
 
     local pss = STATSMAN:GetCurStageStats():GetPlayerStageStats(player)
@@ -254,6 +258,55 @@ local function getRadar(player)
     end
 
     return radarValues
+end
+
+--------------------------------------------------------------------------------------------------
+
+local function comment(player)
+    local pn = ToEnumShortString(player)
+    
+    local comment = ""
+	
+    
+	local cmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):CMod()
+    local mmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):MMod()
+    local xmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):XMod()
+    if xmod ~= nil then
+        xmod = ("%.2f"):format(xmod)
+    end
+
+    if cmod ~= nil then
+		comment = comment.."C"..tostring(cmod)
+    elseif mmod ~= nil then
+        comment = comment.."M"..tostring(mmod)
+    elseif xmod ~= nil then
+        comment = comment.."X"..tostring(xmod)
+    end
+
+    local mini = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mini()
+    if mini ~= nil then comment = comment..", ".. mini .. "%Mini" end
+    
+    local visualDelay = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay()
+    if visualDelay ~= nil then comment = comment..", "..visualDelay.."ms (Vis.Del)" end
+
+    local mirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mirror()
+    local left = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Left()
+    local right = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Right()
+    local turnNone = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):TurnNone()
+    
+    if mirror then
+        comment = comment..", Mirror"
+    elseif left then
+        comment = comment..", Left"
+    elseif right then
+        comment = comment..", Right"
+    elseif not turnNone then
+        comment = comment..", ???Turn"
+    end
+
+    SCREENMAN:SystemMessage(comment)
+
+    return comment
 end
 
 --------------------------------------------------------------------------------------------------
@@ -274,7 +327,7 @@ local function SongResultData(player, apiKey, style)
         difficulty = GAMESTATE:GetCurrentSteps(player):GetMeter(),
         description = escapeString(GAMESTATE:GetCurrentSteps(player):GetDescription()),
         hash = tostring(SL[pn].Streams.Hash),
-        modifiers = CreateCommentString(player)
+        modifiers = comment(player)
     }
 
     -- Result Data
@@ -315,9 +368,7 @@ local function SongResultData(player, apiKey, style)
         style,
         songInfo.modifiers,
         encode(resultInfo.radar)
-        )
-        
-    --debugPrint("JSON Data: "..jsonData)    
+        )  
 
     return jsonData
 
@@ -346,7 +397,7 @@ local function CourseResultData(player, apiKey, style)
         entries = "[",
         hash = BinaryToHex(CRYPTMAN:SHA1File(course:GetCourseDir())):sub(1, 16),
         scripter = escapeString(course:GetScripter()),
-        modifiers = CreateCommentString(player)
+        modifiers = comment(player)
     }
 
 
@@ -416,7 +467,6 @@ u["ScreenEvaluationStage"] = Def.Actor {
             local partValid, allValid = ValidForGrooveStats(player)
             local botURL, apiKey = readURLandKey(player)
             if allValid and botURL ~= nil and apiKey ~= nil then 
-                SCREENMAN:SystemMessage("ModuleCommand")
                 local data = SongResultData(player, apiKey, style)
                 sendData(data, botURL)
 
