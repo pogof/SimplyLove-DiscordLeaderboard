@@ -821,15 +821,15 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed = discord.Embed(title=title, color=color)
         embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
         embed.add_field(name="Song", value=data.get('songName'), inline=True)
-        embed.add_field(name="Artist", value=data.get('artist'), inline=True)
+        # embed.add_field(name="Artist", value=data.get('artist'), inline=True)
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
         embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
-        embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
+        # embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
         upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
         embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
         embed.add_field(name="Grade", value=mapped_grade, inline=True)
         embed.add_field(name="Length", value=data.get('length'), inline=True)
-        embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
+        # embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
         embed.add_field(name="Date played", value=data.get('date'), inline=True)
         embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
@@ -883,8 +883,8 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
 
     grade = data.get('grade')
     mapped_grade = grade_mapping.get(grade, grade)
-    embed = discord.Embed(title=title, color=color)
-    embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
+    embed = discord.Embed(title=f"{title} User <@{user_id}>", color=color)
+    #embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
     embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
@@ -947,6 +947,10 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     WO:  {judgements['e_wo']+judgements['l_wo']} ({judgements['e_wo']}/{judgements['l_wo']})
                     Miss: {judgements['miss']}""", inline=True)
 
+    embed.add_field(name="H/R/M", value=f"""
+                    Hold: {data.get('radar').get('hold')}
+                    Roll: {data.get('radar').get('roll')}
+                    Mine: {data.get('radar').get('mine')}""", inline=True)
 
     y_values = np.array([100 - point['y'] for point in data.get('scatterplotData') if point['y'] not in [0, 200]])
     
