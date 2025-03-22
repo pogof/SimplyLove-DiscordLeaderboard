@@ -284,9 +284,9 @@ local function comment(player)
     end
 
     local mini = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mini()
-    if mini ~= nil then comment = comment..", ".. mini .. "%Mini" end
+    if mini ~= nil then comment = comment..", ".. (100*mini) .. "%Mini" end
     
-    local visualDelay = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay()
+    local visualDelay = math.floor(1000 * GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay() + 0.5)
     if visualDelay ~= nil then comment = comment..", "..visualDelay.."ms (Vis.Del)" end
 
     local mirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mirror()
