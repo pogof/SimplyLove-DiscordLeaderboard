@@ -775,15 +775,15 @@ def init_db():
 
     for table in tablesNormal:
         c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty TEXT,
-                  itgScore TEXT, exScore TEXT, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx TEXT, radar JSON)''')
+                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty INTEGER,
+                  itgScore REAL, exScore REAL, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx REAL, radar JSON)''')
     
     for table in tablesCourses:
         c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty TEXT,
-                  description TEXT, itgScore TEXT, exScore TEXT, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT, prevBestEx TEXT, radar JSON)''')
+                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty INTEGER,
+                  description TEXT, itgScore REAL, exScore REAL, grade TEXT, hash TEXT,
+                  life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)''')
 
 
 
@@ -823,7 +823,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Song", value=data.get('songName'), inline=True)
         # embed.add_field(name="Artist", value=data.get('artist'), inline=True)
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
-        embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
+        embed.add_field(name="Difficulty", value= style + str(data.get('difficulty')), inline=True)
         # embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
         upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
         embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
@@ -1030,8 +1030,6 @@ def send_message():
     data = request.json
     api_key = data.get('api_key')
 
-    #print(data)
-
     # Check if the request contains an API key
     if not api_key:
         return jsonify({'status': 'Request is missing API Key.'}), 402
@@ -1046,7 +1044,6 @@ def send_message():
         return jsonify({'status': 'API Key has not been found in database.'}), 403
 
     user_id, submit_disabled = result
-    #print(user_id, submit_disabled)
 
     # Check if the request contains all required data
     required_keys_song = [
@@ -1060,7 +1057,6 @@ def send_message():
     ]
 
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
-        #print("Request is missing required data.")
         
         user = client.get_user(int(user_id))
 
@@ -1098,9 +1094,6 @@ def send_message():
     # Compare the ex score
     existing_ex_score = float(existing_entry[0]) if existing_entry else 0
     new_ex_score = float(data.get('exScore'))
-
-
-
     
     if existing_entry and new_ex_score > existing_ex_score:
         if data.get('courseName'):
@@ -1188,7 +1181,6 @@ def send_message():
     else:
         isPB = False
 
-
     # Check if submit_disabled is a date and time and if it is past that time and date
     if submit_disabled != 'enabled' and submit_disabled != 'disabled':
         try:
@@ -1201,8 +1193,6 @@ def send_message():
                 conn.commit()
         except ValueError:
             pass
-    
-    isPB = True #!REMOVE THIS LINE BEFORE COMMITTING
 
     if isPB and submit_disabled == 'enabled':
 
@@ -1216,10 +1206,6 @@ def send_message():
             color = discord.Color.green()
         
         embed, file = embedded_score(data, user_id, "New (Server) Personal Best!", color)
-        #embed.set_image(url="attachment://scatterplot.png")
-
-#================================================================================================
-#NEW BUT NOT WORKING
 
         conn = sqlite3.connect(database)
         c = conn.cursor()
@@ -1230,127 +1216,32 @@ def send_message():
 
                 c.execute('SELECT channelID FROM CHANNELS WHERE serverID = ?', (str(guild.id),))
                 channel_results.extend([channel[0] for channel in c.fetchall()])
-        
-        print("Channel results: ", channel_results)
 
-        messageToPost = []
+        getTopScores = f'SELECT userID, exScore FROM {tableType} WHERE hash = ? ORDER BY exScore DESC'
+        c.execute(getTopScores, (data.get('hash'),))
+        top_scores = c.fetchall()
+        
+        embed.add_field(name="Top Server Scores", value="", inline=False)
         for channel_id in channel_results:
             channel = client.get_channel(int(channel_id))
 
-            getTopScores = f'SELECT userID, exScore FROM {tableType} WHERE hash = ? ORDER BY exScore DESC'
-            c.execute(getTopScores, (data.get('hash'),))
-            top_scores = c.fetchall()
-
-
-
             # Filter the top scores to include only members of the current guild
-            top_scores = [(uid, ex_score) for uid, ex_score in top_scores if guild.get_member(int(uid))]
-            print("Top scores: ", top_scores)
+            top_selected_scores = [(uid, ex_score) for uid, ex_score in top_scores if channel.guild.get_member(int(uid))][:3]
 
             # Format the top 3 scores
             top_scores_message = ""
-            for idx, (uid, ex_score) in enumerate(top_scores, start=1):
-                top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"                    
+            for idx, (uid, ex_score) in enumerate(top_selected_scores, start=1):
+                top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
             
-            embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
+            embed.set_field_at(index=-1, name="Top Server Scores", value=top_scores_message, inline=False)
 
-            messageToPost.append((channel, embed))
-
-            for channel, embed in messageToPost:
-                asyncio.run_coroutine_threadsafe(
-                    channel.send(embed=embed, file=discord.File('scatterplot.png', filename='scatterplot.png'), allowed_mentions=discord.AllowedMentions.none()),
-                    client.loop
-                )
-
-        conn.close()
-
-            # messageToPost = []
-            # for channel_result in channel_results:
-            #     channel_id = int(channel_result[0])
-            #     channel = client.get_channel(channel_id)
-
-            #     getTopScores = 'SELECT userID, exScore FROM ' + tableType + ' WHERE hash = ? AND userID IN (SELECT userID FROM ' + tableType + ' WHERE hash = ?) ORDER BY exScore DESC LIMIT 3'
-            #     c.execute(getTopScores, (data.get('hash'), data.get('hash')))
-            #     top_scores = c.fetchall()
-
-            #     # Filter the top scores to include only members of the current guild
-            #     top_scores = [(uid, ex_score) for uid, ex_score in top_scores if guild.get_member(int(uid))]
-
-            #     # Format the top 3 scores
-            #     top_scores_message = ""
-            #     for idx, (uid, ex_score) in enumerate(top_scores, start=1):
-            #         top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"                    
-                
-            #     embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-
-            #     messageToPost.append((channel, embed, file))
-
-            # for channel, embed, file in messageToPost:
-            #     asyncio.run_coroutine_threadsafe(
-            #         channel.send(embed=embed, file=file, allowed_mentions=discord.AllowedMentions.none()),
-            #         client.loop
-            #     )
-
-#  =================================================================================================
-#OLD
-
-        # async def sendallchannel(self, embed):
-        #     coroutines = [channel.send(embed=embed) for channel in fetchedchannel]   
-        #     await asyncio.gather(*coroutines)
-
-
-        # for guild in client.guilds:
-        #     #print("Guilds: ", guild.name)
-
-        #     c.execute('SELECT channelID FROM CHANNELS WHERE serverID = ?', (str(guild.id),))
-        #     channel_results = c.fetchall()
-
-        #     for channel_result in channel_results:
-        #         channel_id = int(channel_result[0])
-        #         channel = client.get_channel(channel_id)
-        #         if channel:
-        #             #print(f"Sending message to channel: {channel.name} (ID: {channel_id}) in guild: {guild.name}")
-                    
-        #             data['date'] = datetime.now().strftime(os.getenv('DATE_FORMAT'))
-        #             data['prevBestEx'] = existing_ex_score
-                    
-        #             if data.get('courseName'):
-        #                 color = discord.Color.purple()
-        #             elif data.get('style') == 'double':
-        #                 color = discord.Color.blue()
-        #             else:
-        #                 color = discord.Color.green()
-
-                    
-
-        #             embed, file = embedded_score(data, user_id, "New (Server) Personal Best!", color)
-        #             #embed.set_image(url="attachment://scatterplot.png")
-                    
-        #             toPost = 'SELECT userID, exScore FROM ' + tableType + ' WHERE hash = ? AND userID IN (SELECT userID FROM ' + tableType + ' WHERE hash = ?) ORDER BY exScore DESC LIMIT 3'
-        #             c.execute(toPost, (data.get('hash'), data.get('hash')))
-        #             top_scores = c.fetchall()
-
-        #             # Filter the top scores to include only members of the current guild
-        #             top_scores = [(uid, ex_score) for uid, ex_score in top_scores if guild.get_member(int(uid))]
-
-        #             # Format the top 3 scores
-        #             top_scores_message = ""
-        #             for idx, (uid, ex_score) in enumerate(top_scores, start=1):
-        #                 top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
-
-
-                    
-        #             embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-
-
-        #             asyncio.run_coroutine_threadsafe(channel.send(embed=embed, file=file, allowed_mentions=discord.AllowedMentions.none()), client.loop)
-        #         #else:
-        #             #print(f"Channel with ID {channel_id} not found in guild {guild.name}")
-
+            asyncio.run_coroutine_threadsafe(
+                channel.send(embed=embed, file=discord.File('scatterplot.png', filename='scatterplot.png'), allowed_mentions=discord.AllowedMentions.none()),
+                client.loop
+            )
 
     conn.close()
     return jsonify({'status': 'success'}), 200
-
 
 #================================================================================================
 # Run Flask, run Discord bot
