@@ -293,7 +293,7 @@ local function comment(player)
     local left = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Left()
     local right = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Right()
     local shuffle = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Shuffle()
-
+    --local turnnone = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):TurnNone() -- This also doens't seem to work lol
     -- These do not seem to exist in ITGMania
     -- local blender = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Blender()
     -- local LRMirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):LRMirror()
@@ -307,15 +307,19 @@ local function comment(player)
         comment = comment..", Right"
     elseif shuffle then
         comment = comment..", Shuffle"
+    -- elseif turnnone then
+    --     comment = comment
+    -- else
+    --     comment = comment..", ???Turn"
+    end
     -- elseif blender then
     --     comment = comment..", Blender"
     -- elseif LRMirror then
     --     comment = comment..", LRMirror"
     -- elseif UDMirror then
     --     comment = comment..", UDMirror"
-    end
 
-    SCREENMAN:SystemMessage(comment)
+    --SCREENMAN:SystemMessage(tostring(turnnone) .. " " .. comment)
 
     return comment
 end
