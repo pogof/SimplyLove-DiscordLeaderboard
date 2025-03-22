@@ -80,7 +80,8 @@ def extract_data_from_row(row):
         'worstWindow': row[13],
         'date': row[14],
         'mods': row[15],
-        'prevBestEx': row[17]
+        'prevBestEx': row[17],
+        'radar': json.loads(row[18].replace("'", '"') if row[18] else '[]')
     }
 
 def extract_course_data_from_row(row):
@@ -98,5 +99,6 @@ def extract_course_data_from_row(row):
         'lifebarInfo': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
         'date': row[12],
         'mods': row[13],
-        'prevBestEx': row[14]
+        'prevBestEx': row[14],
+        'radar': json.loads(row[15].replace("'", '"') if row[15] else '[]')
     }

@@ -883,8 +883,8 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
 
     grade = data.get('grade')
     mapped_grade = grade_mapping.get(grade, grade)
-    embed = discord.Embed(title=f"{title} User <@{user_id}>", color=color)
-    #embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
+    embed = discord.Embed(title=f"{title}", color=color)
+    embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
     embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
@@ -947,10 +947,14 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     WO:  {judgements['e_wo']+judgements['l_wo']} ({judgements['e_wo']}/{judgements['l_wo']})
                     Miss: {judgements['miss']}""", inline=True)
 
-    embed.add_field(name="H/R/M", value=f"""
-                    Hold: {data.get('radar').get('hold')}
-                    Roll: {data.get('radar').get('roll')}
-                    Mine: {data.get('radar').get('mine')}""", inline=True)
+    radar = data.get('radar')
+    if radar:
+        embed.add_field(name="Holds/Rolls/Mines", value=f"""
+                        Holds: {radar.get('Holds')[0]}/{radar.get('Holds')[1]}
+                        Rolls: {radar.get('Rolls')[0]}/{radar.get('Rolls')[1]}
+                        Mines: {radar.get('Mines')[0]}/{radar.get('Mines')[1]}""", inline=True)
+    else:
+        embed.add_field(name="Holds/Rolls/Mines", value="No radar data available", inline=True)
 
     y_values = np.array([100 - point['y'] for point in data.get('scatterplotData') if point['y'] not in [0, 200]])
     
