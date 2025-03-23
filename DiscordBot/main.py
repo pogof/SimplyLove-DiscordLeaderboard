@@ -308,7 +308,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 #================================================================================================
 
 @client.tree.command(name="course", description="Recall course result from database.")
-async def course(interaction: discord.Interaction, song: str, isdouble: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+async def course(interaction: discord.Interaction, name: str, isdouble: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return
@@ -327,9 +327,9 @@ async def course(interaction: discord.Interaction, song: str, isdouble: bool = F
 
     params = []
 
-    if song:
+    if name:
         query += " AND courseName LIKE ?"
-        params.append(f"%{song}%")
+        params.append(f"%{name}%")
     if user:
         query += " AND userID = ?"
         params.append(str(user.id))
@@ -548,7 +548,7 @@ async def compare_logic(interaction: discord.Interaction, page: int, order, priv
 #================================================================================================
 
 @client.tree.command(name="unplayed", description="Returns a list of songs that you have not played.")
-@app_commands.describe(user_two="User to compare (optional)", private="Whether the response should be private", order="The order asc/desc_ex, _alpha, _diff")
+@app_commands.describe(user_two="User to compare (optional)", private="Whether the response should be private", order="The order asc/desc_ex, _alpha")
 async def unplayed(interaction: discord.Interaction, user_two: discord.User = None, isdouble: bool = False, iscourse: bool = False, page: int = 1, order: str = "desc_alpha", private: bool = True, pack: str = "", difficulty: int = 0):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
