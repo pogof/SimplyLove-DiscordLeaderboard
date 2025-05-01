@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 import discord
 from discord.ext import commands
-from discord import Button, app_commands
+from discord import app_commands
 from discord.utils import escape_mentions
+from discord.ui import Button, View
 import sqlite3
 import secrets
 from flask import Flask, request, jsonify
@@ -277,12 +278,15 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
                 if isdouble:
                     data['style'] = 'double'
 
-                #print(data)
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
                 embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
-                
-                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+
+                # Add the breakdown button
+                view = View()
+                view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+
+                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
@@ -298,7 +302,11 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
         embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
 
-        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+        # Add the breakdown button
+        view = View()
+        view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+
+        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
 #================================================================================================
 # Recall course result
@@ -394,6 +402,49 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
         embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+
+
+
+# Quick access to the score command from score that was submitted or recalled
+class ScoreButton(discord.ui.Button):
+    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, failed: bool, difficulty: int, pack: str, private: bool):
+        super().__init__(label="View Score", style=discord.ButtonStyle.primary)
+        self.interaction = interaction
+        self.song = song
+        self.user = user
+        self.isdouble = isdouble
+        self.failed = failed
+        self.difficulty = difficulty
+        self.pack = pack
+        self.private = private
+
+    async def callback(self, interaction: discord.Interaction):
+        # Retrieve the breakdown command
+        score_command = interaction.client.tree.get_command("score")
+        if score_command is None:
+            await interaction.response.send_message("The score command could not be found.", ephemeral=True)
+            return
+
+        # Create a namespace for the command arguments
+        class Namespace:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        # Prepare the arguments for the breakdown command
+        args = Namespace(
+            interaction=interaction,
+            song=self.song,
+            user=self.user,
+            isdouble=self.isdouble,
+            iscourse=False,
+            failed=self.failed,
+            difficulty=self.difficulty,
+            pack=self.pack,
+            private=self.private
+        )
+
+        # Invoke the breakdown command
+        await score_command._invoke_with_namespace(interaction, args)
 
 #================================================================================================
 # compare two users
@@ -733,7 +784,10 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 data = extract_data_from_row(selected_row)
                 embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
-                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+                view = View()
+                view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+
+                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
@@ -743,8 +797,53 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         data = extract_data_from_row(selected_row)
         embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
-        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
+        view = View()
+        view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
 
+        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
+
+
+
+# Quick access to the breakdown command from score that was submitted or recalled
+class BreakdownButton(discord.ui.Button):
+    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, failed: bool, difficulty: int, pack: str, private: bool):
+        super().__init__(label="View Breakdown", style=discord.ButtonStyle.primary)
+        self.interaction = interaction
+        self.song = song
+        self.user = user
+        self.isdouble = isdouble
+        self.failed = failed
+        self.difficulty = difficulty
+        self.pack = pack
+        self.private = private
+
+    async def callback(self, interaction: discord.Interaction):
+        # Retrieve the breakdown command
+        breakdown_command = interaction.client.tree.get_command("breakdown")
+        if breakdown_command is None:
+            await interaction.response.send_message("The breakdown command could not be found.", ephemeral=True)
+            return
+
+        # Create a namespace for the command arguments
+        class Namespace:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        # Prepare the arguments for the breakdown command
+        args = Namespace(
+            interaction=interaction,
+            song=self.song,
+            user=self.user,
+            isdouble=self.isdouble,
+            iscourse=False,  # Assuming this is not a course
+            failed=self.failed,
+            difficulty=self.difficulty,
+            pack=self.pack,
+            private=self.private
+        )
+
+        # Invoke the breakdown command
+        await breakdown_command._invoke_with_namespace(interaction, args)
 
 #================================================================================================
 # Database
@@ -974,6 +1073,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     max error: {max_error}ms
                     Note that the numbers are rounded differently then in SL.""",
                     inline=True)
+    embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
     create_distribution_from_json(data.get('scatterplotData'), data.get('worstWindow'), output_file='distribution.png')
     # Send the embed with the image attachment
@@ -1211,7 +1311,8 @@ def send_message():
         getTopScores = f'SELECT userID, exScore FROM {tableType} WHERE hash = ? ORDER BY exScore DESC'
         c.execute(getTopScores, (data.get('hash'),))
         top_scores = c.fetchall()
-        
+
+
         embed.add_field(name="Top Server Scores", value="", inline=False)
         for channel_id in channel_results:
             channel = client.get_channel(int(channel_id))
@@ -1225,7 +1326,7 @@ def send_message():
                 top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
             
             embed.set_field_at(index=-1, name="Top Server Scores", value=top_scores_message, inline=False)
-
+            
             asyncio.run_coroutine_threadsafe(
                 channel.send(embed=embed, file=discord.File('scatterplot.png', filename='scatterplot.png'), allowed_mentions=discord.AllowedMentions.none()),
                 client.loop
