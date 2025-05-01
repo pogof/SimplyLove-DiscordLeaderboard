@@ -282,14 +282,11 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
                 top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
                 embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
                 
-                #TODO: It worked without deleting the message, at least for a little while :(
-                #Need to figure something out lol
-                await interaction.message.delete()
                 await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
-        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=private)
+        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
@@ -381,14 +378,11 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
                 top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
                 embed.add_field(name="Top Server Scores", value=top_scores_message, inline=False)
                 
-                #TODO: It worked without deleting the message, at least for a little while :(
-                #Need to figure something out lol
-                await interaction.message.delete()
                 await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
-        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=private)
+        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
         selected_row = results[0]
         data = extract_course_data_from_row(selected_row)
@@ -738,15 +732,12 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
                 embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
-                
-                #TODO: It worked without deleting the message, at least for a little while :(
-                #Need to figure something out lol
-                await interaction.message.delete()
+
                 await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
-        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=private)
+        await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
