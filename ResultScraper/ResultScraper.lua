@@ -326,7 +326,7 @@ end
 
 --------------------------------------------------------------------------------------------------
 
-local function SongResultData(player, apiKey, style)
+local function SongResultData(player, apiKey, style, gameMode)
     
     local pn = ToEnumShortString(player)
 
@@ -364,7 +364,7 @@ local function SongResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "mods": "%s", "radar": %s}',
+        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
         apiKey,
         songInfo.name,
         songInfo.artist,
@@ -382,7 +382,8 @@ local function SongResultData(player, apiKey, style)
         ("%.4f"):format(worst_window),
         style,
         songInfo.modifiers,
-        encode(resultInfo.radar)
+        encode(resultInfo.radar),
+        gameMode
         )  
 
     return jsonData
@@ -394,7 +395,7 @@ end
 
 
 
-local function CourseResultData(player, apiKey, style)
+local function CourseResultData(player, apiKey, style, gameMode)
     
     local pn = ToEnumShortString(player)
 
@@ -443,7 +444,7 @@ local function CourseResultData(player, apiKey, style)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s}',
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
         apiKey,
         courseInfo.name,
         courseInfo.pack,
@@ -458,7 +459,8 @@ local function CourseResultData(player, apiKey, style)
         lifebarInfoJson,
         style,
         courseInfo.modifiers,
-        encode(resultInfo.radar)
+        encode(resultInfo.radar),
+        gameMode
         )
 
     return jsonData
@@ -473,20 +475,33 @@ local u = {}
 u["ScreenEvaluationStage"] = Def.Actor {
     ModuleCommand = function(self)
 
-        
+        -- "dance" or "pump"
+        local gameMode = GAMESTATE:GetCurrentGame():GetName()
         -- single, versus, double
         local style = GAMESTATE:GetCurrentStyle():GetName()
         if style == "versus" then style = "single" end
-        
+
         for player in ivalues(GAMESTATE:GetHumanPlayers()) do
             local partValid, allValid = ValidForGrooveStats(player)
-            local botURL, apiKey = readURLandKey(player)
-            if allValid and botURL ~= nil and apiKey ~= nil then 
-                local data = SongResultData(player, apiKey, style)
-                sendData(data, botURL)
+
+            if gameMode == "pump" then
+                
+                allValid = true
+                for i, valid in ipairs(partValid) do
+                    if i ~= 1 and not valid then
+                        allValid = false
+                        break
+                    end
+                end
 
             end
-            
+
+            local botURL, apiKey = readURLandKey(player)
+            if allValid and botURL ~= nil and apiKey ~= nil then 
+                local data = SongResultData(player, apiKey, style, gameMode)
+                sendData(data, botURL)
+            end
+        
         end
 
     end
@@ -503,30 +518,42 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
         -- Would be kinda unfair
         if fixed and not autogen and not endless then
             
-            
+            -- "dance" or "pump"
+            local gameMode = GAMESTATE:GetCurrentGame():GetName()
             -- single, versus, double
             local style = GAMESTATE:GetCurrentStyle():GetName()
             if style == "versus" then style = "single" end
             
             for player in ivalues(GAMESTATE:GetHumanPlayers()) do
-                
-                
                 -- Doesn't return true for courses, but I can use everything else lol
                 local partValid, allValid = ValidForGrooveStats(player)
-
-                allValid = true
-                for i, valid in ipairs(partValid) do
-                    if i ~= 3 and not valid then
-                        allValid = false
-                        break
+                
+                if gameMode == "pump" then
+                    
+                    allValid = true
+                    for i, valid in ipairs(partValid) do
+                        if (i ~= 3 and i ~= 1) and not valid then
+                            allValid = false
+                            break
+                        end
                     end
+                
+                else
+
+                    allValid = true
+                    for i, valid in ipairs(partValid) do
+                        if i ~= 3 and not valid then
+                            allValid = false
+                            break
+                        end
+                    end
+
                 end
 
-                
                 local botURL, apiKey = readURLandKey(player)
                 if allValid and botURL ~= nil and apiKey ~= nil then
                     -- Different day different data
-                    local data = CourseResultData(player, apiKey, style)
+                    local data = CourseResultData(player, apiKey, style, gameMode)
                     sendData(data, botURL)
 
                 end

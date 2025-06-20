@@ -785,6 +785,19 @@ def init_db():
                   description TEXT, itgScore REAL, exScore REAL, grade TEXT, hash TEXT,
                   life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)''')
 
+    tablesPump = ['SINGLES_PUMP', 'SINGLESFAILS_PUMP', 'DOUBLES_PUMP', 'DOUBLESFAILS_PUMP']
+    tablesCoursesPump = ['COURSESSINGLES_PUMP', 'COURSESSINGLESFAILS_PUMP', 'COURSESDOUBLES_PUMP', 'COURSESDOUBLESFAILS_PUMP']
+    for table in tablesPump:
+        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
+                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty INTEGER,
+                  itgScore REAL, exScore REAL, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx REAL, radar JSON)''')
+        
+    for table in tablesCoursesPump:
+        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
+                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty INTEGER,
+                  description TEXT, itgScore REAL, exScore REAL, grade TEXT, hash TEXT,
+                  life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)''')
 
 
     conn.commit()
@@ -814,7 +827,11 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
             style = 'D'
         else:
             style = 'S'
-
+            
+        if data.get('gameMode') == 'pump':
+            title = f"{title} - PUMP"
+        else:
+            title = f"{title} - ITG"
 
         grade = data.get('grade')
         mapped_grade = grade_mapping.get(grade, grade)
@@ -1081,6 +1098,9 @@ def send_message():
     if data.get('grade') == 'Grade_Failed':
         tableType += 'FAILS'
         isPB = False
+    
+    if data.get('gameMode') == 'pump':
+        tableType += '_PUMP'
     
     conn = sqlite3.connect(database)
     c = conn.cursor()
