@@ -23,9 +23,16 @@ jobs:
     # Build the Docker image
     - name: Build Docker image
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:${{ github.ref_name }} .
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:${{ github.ref_name }} ./DiscordBot
 
     # Push the Docker image
     - name: Push Docker image
       run: |
         docker push ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:${{ github.ref_name }}
+
+    # Push the Docker image with 'latest' tag
+    - name: Push Docker image (latest)
+      run: |
+        docker tag ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:${{ github.ref_name }} \
+                   ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:latest
