@@ -32,7 +32,9 @@ intents.members = True  # Enable the members intent
 intents.message_content = True  # Enable the message content intent
 client = commands.Bot(command_prefix='!', intents=intents)
 
-database = 'database.db'
+db_folder = os.path.join(os.path.dirname(__file__), 'dbdata')
+os.makedirs(db_folder, exist_ok=True)
+database = os.path.join(db_folder, 'database.db')
 
 
 #================================================================================================
