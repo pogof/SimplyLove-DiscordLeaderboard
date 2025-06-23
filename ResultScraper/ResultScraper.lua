@@ -20,6 +20,82 @@ end
 
 --------------------------------------------------------------------------------------------------
 
+-- This section was stolen from SL-Helper-GrooveStats.lua
+-- Values edited to work for pump mode 
+
+local function validatePumpWindows(player)
+
+	local pn = ToEnumShortString(player)	
+	
+	-- Validate all other metrics.
+	local ExpectedTWA = 0.0015
+	local ExpectedWindows = {
+		0.021500 + ExpectedTWA,  -- Fantastics
+		0.043000 + ExpectedTWA,  -- Excellents
+		0.102000 + ExpectedTWA,  -- Greats
+		0.135000 + ExpectedTWA,  -- Decents
+		0.180000 + ExpectedTWA,  -- Way Offs
+		0.320000 + ExpectedTWA,  -- Holds
+		0.070000 + ExpectedTWA,  -- Mines
+		0.350000 + ExpectedTWA,  -- Rolls
+	}
+	local TimingWindows = { "W1", "W2", "W3", "W4", "W5", "Hold", "Mine", "Roll" }
+	local ExpectedLife = {
+		 0.008,  -- Fantastics
+		 0.008,  -- Excellents
+		 0.004,  -- Greats
+		 0.000,  -- Decents
+		-0.050,  -- Way Offs
+		-0.100,  -- Miss
+		 0.000,  -- Let Go
+		 0.000,  -- Held
+		-0.050,  -- Hit Mine
+	}
+	local ExpectedScoreWeight = {
+		 5,  -- Fantastics
+		 4,  -- Excellents
+		 2,  -- Greats
+		 0,  -- Decents
+		-6,  -- Way Offs
+		-12,  -- Miss
+		 0,  -- Let Go
+		 0,  -- Held
+		-6,  -- Hit Mine
+	}
+	local LifeWindows = { "W1", "W2", "W3", "W4", "W5", "Miss", "LetGo", "Held", "HitMine" }
+
+	-- Originally verify the ComboToRegainLife metrics.
+	local valid = (PREFSMAN:GetPreference("RegenComboAfterMiss") == 5 and PREFSMAN:GetPreference("MaxRegenComboAfterMiss") == 10)
+
+	local FloatEquals = function(a, b)
+		return math.abs(a-b) < 0.0001
+	end
+
+	valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "InitialValue"), 0.5)
+	valid = valid and PREFSMAN:GetPreference("HarshHotLifePenalty")
+
+	-- And then verify the windows themselves.
+	local TWA = PREFSMAN:GetPreference("TimingWindowAdd")
+	if SL.Global.GameMode == "ITG" then
+		for i, window in ipairs(TimingWindows) do
+			-- Only check if the Timing Window is actually "enabled".
+			if i > 5 or SL[pn].ActiveModifiers.TimingWindows[i] then
+				valid = valid and FloatEquals(PREFSMAN:GetPreference("TimingWindowSeconds"..window) + TWA, ExpectedWindows[i])
+			end
+		end
+
+		for i, window in ipairs(LifeWindows) do
+			valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "LifePercentChange"..window), ExpectedLife[i])
+
+			valid = valid and THEME:GetMetric("ScoreKeeperNormal", "PercentScoreWeight"..window) == ExpectedScoreWeight[i]
+		end
+	end
+	
+	return valid
+end
+
+--------------------------------------------------------------------------------------------------
+
 local function readURLandKey(player)
 
     local pdir
@@ -125,8 +201,8 @@ end
 
 --------------------------------------------------------------------------------------------------
 
-local function sendData(data, botURL)
-        
+local function sendData(data, botURL, callback)
+
     -- Send HTTP POST request
     NETWORK:HttpRequest{
         url = botURL,
@@ -136,12 +212,13 @@ local function sendData(data, botURL)
             ["Content-Type"] = "application/json"
         },
         onResponse = function(response)
-            if type(response) == "table" then
-                response = table.concat(response)
+            local code = response.statusCode or nil
+            local body = response.body or nil
+            if callback then
+                callback(code, body)
             end
-            debugPrint("HTTP Response: " .. response)
         end
-    }        
+    }
 end
 
 --------------------------------------------------------------------------------------------------
@@ -347,7 +424,6 @@ local function SongResultData(player, apiKey, style, gameMode)
 
     -- Result Data
     local resultInfo = {
-        -- playerName = escapeString(GAMESTATE:GetPlayerDisplayName(player)), -- unnecessary
         score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
@@ -391,9 +467,6 @@ local function SongResultData(player, apiKey, style, gameMode)
 end
 
 --------------------------------------------------------------------------------------------------
-
-
-
 
 local function CourseResultData(player, apiKey, style, gameMode)
     
@@ -467,14 +540,12 @@ local function CourseResultData(player, apiKey, style, gameMode)
 
 end
 
-
 --------------------------------------------------------------------------------------------------
 
 local u = {}
 
 u["ScreenEvaluationStage"] = Def.Actor {
     ModuleCommand = function(self)
-
         -- "dance" or "pump"
         local gameMode = GAMESTATE:GetCurrentGame():GetName()
         -- single, versus, double
@@ -485,6 +556,8 @@ u["ScreenEvaluationStage"] = Def.Actor {
             local partValid, allValid = ValidForGrooveStats(player)
 
             if gameMode == "pump" then
+
+                partValid[7] = validatePumpWindows(player)
                 
                 allValid = true
                 for i, valid in ipairs(partValid) do
@@ -497,9 +570,22 @@ u["ScreenEvaluationStage"] = Def.Actor {
             end
 
             local botURL, apiKey = readURLandKey(player)
-            if allValid and botURL ~= nil and apiKey ~= nil then 
-                local data = SongResultData(player, apiKey, style, gameMode)
-                sendData(data, botURL)
+
+            if botURL ~= nil and apiKey ~= nil then
+                if allValid then
+                    local data = SongResultData(player, apiKey, style, gameMode)
+                    sendData(data, botURL, function(code, body)
+                        if code == 200 then
+                            SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " Score successfully submitted.")
+                        else
+                            SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                        end
+                    end)
+                else
+                    SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Check player options. (Same rules as for GS apply)")
+                end
+            else
+                SM("DiscordLeaderboard: Invalid data for player " .. ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
             end
         
         end
@@ -529,6 +615,8 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                 local partValid, allValid = ValidForGrooveStats(player)
                 
                 if gameMode == "pump" then
+                	
+		            partValid[7] = validatePumpWindows(player)
                     
                     allValid = true
                     for i, valid in ipairs(partValid) do
@@ -551,17 +639,26 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                 end
 
                 local botURL, apiKey = readURLandKey(player)
-                if allValid and botURL ~= nil and apiKey ~= nil then
+                if botURL ~= nil and apiKey ~= nil then
+                    if allValid then
                     -- Different day different data
                     local data = CourseResultData(player, apiKey, style, gameMode)
-                    sendData(data, botURL)
-
+                        sendData(data, botURL, function(code, body)
+                            if code == 200 then
+                                SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " Score successfully submitted.")
+                            else
+                                SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                            end
+                        end)
+                    else
+                        SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Check player options. (Same rules as for GS apply)")
+                    end
+                else
+                    SM("DiscordLeaderboard: Invalid data for player " .. ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
                 end
                 
             end
         end
-
-
 
     end
 }
