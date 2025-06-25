@@ -213,7 +213,9 @@ local function sendData(data, botURL, callback)
         },
         onResponse = function(response)
             local code = response.statusCode or nil
-            local body = response.body or nil
+            local response_body = response.body or nil
+            local decoded = JsonDecode(response_body)
+            local body = decoded and decoded.status or tostring(body)
             if callback then
                 callback(code, body)
             end
@@ -344,7 +346,6 @@ local function comment(player)
     
     local comment = ""
 	
-    
 	local cmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):CMod()
     local mmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):MMod()
     local xmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):XMod()
@@ -361,42 +362,30 @@ local function comment(player)
     end
 
     local mini = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mini()
-    if mini ~= nil then comment = comment..", ".. math.floor(100 * mini + 0.5) .. "%Mini" end
+    if mini ~= nil then comment = comment..", ".. math.floor(100 * mini + 0.5) .. "% Mini" end
     
     local visualDelay = math.floor(1000 * GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay() + 0.5)
-    if visualDelay ~= nil then comment = comment..", "..visualDelay.."ms (Vis.Del)" end
+    if visualDelay ~= nil and visualDelay ~= 0 then comment = comment..", "..visualDelay.."ms (Vis.Del)" end
 
-    local mirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mirror()
-    local left = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Left()
-    local right = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Right()
-    local shuffle = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Shuffle()
-    --local turnnone = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):TurnNone() -- This also doens't seem to work lol
-    -- These do not seem to exist in ITGMania
-    -- local blender = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Blender()
-    -- local LRMirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):LRMirror()
-    -- local UDMirror = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):UDMirror()
-    
-    if mirror then
-        comment = comment..", Mirror"
-    elseif left then
-        comment = comment..", Left"
-    elseif right then
-        comment = comment..", Right"
-    elseif shuffle then
-        comment = comment..", Shuffle"
-    -- elseif turnnone then
-    --     comment = comment
-    -- else
-    --     comment = comment..", ???Turn"
+    local turn = GAMESTATE:GetPlayerState(pn):GetPlayerOptionsArray("ModsLevel_Preferred")
+
+    local turnLabels = {
+        Mirror        = ", Mirror",
+        Left          = ", Left",
+        Right         = ", Right",
+        LRMirror      = ", LR-Mirror",
+        UDMirror      = ", UD-Mirror",
+        Shuffle       = ", Shuffle",
+        SuperShuffle  = ", Blender",
+        HyperShuffle  = ", Random",
+        Backwards     = ", Backwards"
+    }
+
+    for i, o in ipairs(turn) do
+        if turnLabels[o] then
+            comment = comment .. turnLabels[o]
+        end
     end
-    -- elseif blender then
-    --     comment = comment..", Blender"
-    -- elseif LRMirror then
-    --     comment = comment..", LRMirror"
-    -- elseif UDMirror then
-    --     comment = comment..", UDMirror"
-
-    --SCREENMAN:SystemMessage(tostring(turnnone) .. " " .. comment)
 
     return comment
 end
