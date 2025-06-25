@@ -111,6 +111,158 @@ async def usethischannel_error(Interaction: discord.Interaction, error: app_comm
     else:
         await Interaction.response.send_message("An error occurred while trying to run this command.", ephemeral=True)
 
+#================================================================================================
+# ADMIN COMMAND: Delete score - EXPERIMENTAL
+#================================================================================================
+
+@client.tree.command(name="deletescore", description="Delete a score from the database. (Admin only)")
+@app_commands.checks.has_permissions(administrator=True)
+async def deletescore(Interaction: discord.Interaction, song: str, isdouble: bool = False, ispump: bool = False, iscourse: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+    if Interaction.guild is None:
+        await Interaction.response.send_message("This command can only be used in a server.")
+        return
+
+    tableType = ''
+    if iscourse:
+        tableType = 'COURSES'
+    if isdouble:
+        tableType += 'DOUBLES'
+    else:
+        tableType += 'SINGLES'
+    if ispump:
+        tableType += '_PUMP'
+
+    query = 'SELECT * FROM ' + tableType + ' WHERE 1=1'
+
+    params = []
+
+    # Use correct column name for song/course
+    name_column = "courseName" if iscourse else "songName"
+    if song:
+        query += f" AND {name_column} LIKE ?"
+        params.append(f"%{song}%")
+    if user:
+        query += " AND userID = ?"
+        params.append(str(user.id))
+    if user is None:
+        query += " AND userID = ?"
+        params.append(str(Interaction.user.id))
+        user = Interaction.user
+    if difficulty:
+        query += " AND difficulty = ?"
+        params.append(str(difficulty))
+    if pack:
+        query += " AND pack LIKE ?"
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute(query, params)
+    results = c.fetchall()
+    conn.close()
+
+    if not results:
+        await Interaction.response.send_message("No scores found matching the criteria.", ephemeral=True)
+        return
+
+    if len(results) > 1:
+        # Prepare select options using correct columns for course/song
+        options = []
+        for index, row in enumerate(results):
+            if iscourse:
+                label = f"{row[1]} - {row[4]} [{row[5]}]"
+                description = f" EX Score: {row[8]}%, Pack: {row[2]}"
+            else:
+                label = f"{row[1]} - {row[2]} [{row[4]}]"
+                description = f" EX Score: {row[6]}%, Pack: {row[3]}"
+            options.append(discord.SelectOption(label=label, description=description, value=str(index)))
+
+        class DeleteScoreSelect(discord.ui.Select):
+            def __init__(self):
+                super().__init__(placeholder="Choose a score to delete...", options=options)
+
+            async def callback(self, interaction: discord.Interaction):
+                selected_index = int(self.values[0])
+                selected_row = results[selected_index]
+                if iscourse:
+                    data = extract_course_data_from_row(selected_row)
+                    hash_index = 9
+                else:
+                    data = extract_data_from_row(selected_row)
+                    hash_index = 10
+
+                embed, file = embedded_score(data, str(user.id), "Selected Score to Delete", discord.Color.red())
+
+                class ConfirmDeleteButton(discord.ui.Button):
+                    def __init__(self):
+                        super().__init__(label="Delete", style=discord.ButtonStyle.danger)
+
+                    async def callback(self, button_interaction: discord.Interaction):
+                        # Actually delete the selected score
+                        conn = sqlite3.connect(database)
+                        c = conn.cursor()
+                        c.execute(f"DELETE FROM {tableType} WHERE hash = ? AND userID = ?", (selected_row[hash_index], str(user.id)))
+                        deleted_rows = c.rowcount
+                        conn.commit()
+                        conn.close()
+                        if deleted_rows > 0:
+                            await button_interaction.response.send_message(f"Successfully deleted the selected score.", ephemeral=True)
+                        else:
+                            await button_interaction.response.send_message("Failed to delete the score.", ephemeral=True)
+
+                class DoNothingButton(discord.ui.Button):
+                    def __init__(self):
+                        super().__init__(label="Do Nothing", style=discord.ButtonStyle.secondary)
+
+                    async def callback(self, button_interaction: discord.Interaction):
+                        await button_interaction.response.send_message("No action taken.", ephemeral=True)
+
+                view = discord.ui.View()
+                view.add_item(ConfirmDeleteButton())
+                view.add_item(DoNothingButton())
+
+                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=True, view=view)
+
+        view = discord.ui.View()
+        view.add_item(DeleteScoreSelect())
+        await Interaction.response.send_message("Multiple scores found. Please select one to delete:", view=view, ephemeral=True)
+    else:
+        selected_row = results[0]
+        if iscourse:
+            data = extract_course_data_from_row(selected_row)
+            hash_index = 9
+        else:
+            data = extract_data_from_row(selected_row)
+            hash_index = 10
+        embed, file = embedded_score(data, str(user.id), "Selected Score to Delete", discord.Color.red())
+
+        class ConfirmDeleteButton(discord.ui.Button):
+            def __init__(self):
+                super().__init__(label="Delete", style=discord.ButtonStyle.danger)
+
+            async def callback(self, button_interaction: discord.Interaction):
+                conn = sqlite3.connect(database)
+                c = conn.cursor()
+                c.execute(f"DELETE FROM {tableType} WHERE hash = ? AND userID = ?", (selected_row[hash_index], str(user.id)))
+                deleted_rows = c.rowcount
+                conn.commit()
+                conn.close()
+                if deleted_rows > 0:
+                    await button_interaction.response.send_message(f"Successfully deleted the selected score.", ephemeral=True)
+                else:
+                    await button_interaction.response.send_message("Failed to delete the score.", ephemeral=True)
+
+        class DoNothingButton(discord.ui.Button):
+            def __init__(self):
+                super().__init__(label="Do Nothing", style=discord.ButtonStyle.secondary)
+
+            async def callback(self, button_interaction: discord.Interaction):
+                await button_interaction.response.send_message("No action taken.", ephemeral=True)
+
+        view = discord.ui.View()
+        view.add_item(ConfirmDeleteButton())
+        view.add_item(DoNothingButton())
+
+        await Interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=True, view=view)
+
 
 #================================================================================================
 # Generate API key
