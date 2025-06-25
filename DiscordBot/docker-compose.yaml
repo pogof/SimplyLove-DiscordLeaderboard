@@ -3,11 +3,14 @@ version: '3.8'
 services:
   app:
     build: .
+    restart: unless-stopped
     ports:
       - "5000:5000"
     volumes:
-      - .:/app
+      - ./dbdata:/app/dbdata
     env_file:
       - .env
+    environment:
+      - TZ=Europe/Prague
     command: python3 main.py
 
