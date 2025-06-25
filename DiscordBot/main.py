@@ -873,40 +873,41 @@ class BreakdownButton(discord.ui.Button):
 def init_db():
     conn = sqlite3.connect(database)
     c = conn.cursor()
+
+    c.execute('''CREATE TABLE IF NOT EXISTS CONFIG
+                    (version TEXT PRIMARY KEY)''')
+
     c.execute('''CREATE TABLE IF NOT EXISTS USERS
                  (DiscordUser TEXT PRIMARY KEY, APIKey TEXT, submitDisabled TEXT DEFAULT 'enabled')''')
     
     c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS
                  (serverID TEXT, channelID TEXT, PRIMARY KEY (serverID, channelID))''')
     
-    tablesNormal = ['SINGLES', 'SINGLESFAILS', 'DOUBLES', 'DOUBLESFAILS']
-    tablesCourses = ['COURSESSINGLES', 'COURSESSINGLESFAILS', 'COURSESDOUBLES', 'COURSESDOUBLESFAILS']
 
-    for table in tablesNormal:
-        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
+    normal_schema = '''
                  (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty INTEGER,
                   itgScore REAL, exScore REAL, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx REAL, radar JSON)''')
-    
-    for table in tablesCourses:
-        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
+                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx REAL, radar JSON)
+                  '''
+    course_schema = '''
                  (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty INTEGER,
                   description TEXT, itgScore REAL, exScore REAL, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)''')
+                  life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)
+                  '''
 
-    tablesPump = ['SINGLES_PUMP', 'SINGLESFAILS_PUMP', 'DOUBLES_PUMP', 'DOUBLESFAILS_PUMP']
-    tablesCoursesPump = ['COURSESSINGLES_PUMP', 'COURSESSINGLESFAILS_PUMP', 'COURSESDOUBLES_PUMP', 'COURSESDOUBLESFAILS_PUMP']
-    for table in tablesPump:
-        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
-                 (userID TEXT, songName TEXT, artist TEXT, pack TEXT, difficulty INTEGER,
-                  itgScore REAL, exScore REAL, grade TEXT, length TEXT, stepartist TEXT, hash TEXT,
-                  scatter JSON, life JSON, worstWindow TEXT, date TEXT, mods TEXT, description TEXT, prevBestEx REAL, radar JSON)''')
-        
-    for table in tablesCoursesPump:
-        c.execute(f'''CREATE TABLE IF NOT EXISTS {table}
-                 (userID TEXT, courseName TEXT, pack TEXT, entries TEXT, scripter TEXT, difficulty INTEGER,
-                  description TEXT, itgScore REAL, exScore REAL, grade TEXT, hash TEXT,
-                  life JSON, date TEXT, mods TEXT, prevBestEx REAL, radar JSON)''')
+    tables_normal = [
+        'SINGLES', 'SINGLESFAILS', 'DOUBLES', 'DOUBLESFAILS',
+        'SINGLES_PUMP', 'SINGLESFAILS_PUMP', 'DOUBLES_PUMP', 'DOUBLESFAILS_PUMP'
+    ]
+    tables_courses = [
+        'COURSESSINGLES', 'COURSESSINGLESFAILS', 'COURSESDOUBLES', 'COURSESDOUBLESFAILS',
+        'COURSESSINGLES_PUMP', 'COURSESSINGLESFAILS_PUMP', 'COURSESDOUBLES_PUMP', 'COURSESDOUBLESFAILS_PUMP'
+    ]
+
+    for table in tables_normal:
+        c.execute(f'CREATE TABLE IF NOT EXISTS {table} {normal_schema}')
+    for table in tables_courses:
+        c.execute(f'CREATE TABLE IF NOT EXISTS {table} {course_schema}')
 
 
     conn.commit()
