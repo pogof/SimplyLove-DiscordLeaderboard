@@ -903,8 +903,9 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     
     params = []
 
+    name_column = "courseName" if iscourse else "songName"
     if song:
-        query += " AND songName LIKE ?"
+        query += f" AND {name_column} LIKE ?"
         params.append(f"%{song}%")
     if user:
         query += " AND userID = ?"
@@ -1131,7 +1132,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Course", value=data.get('courseName'), inline=True)
         embed.add_field(name="Scripter", value=data.get('scripter'), inline=True)
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
-        embed.add_field(name="Difficulty", value= style + data.get('difficulty'), inline=True)
+        embed.add_field(name="Difficulty", value= style + str(data.get('difficulty')), inline=True)
         embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
         upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
         embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
