@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 from library import *
 from plot import *
+import json
 
 load_dotenv()
 
@@ -184,17 +185,16 @@ async def deletescore(Interaction: discord.Interaction, song: str, isdouble: boo
                 selected_row = results[selected_index]
                 if iscourse:
                     data = extract_course_data_from_row(selected_row)
-                    hash_index = 9
                 else:
                     data = extract_data_from_row(selected_row)
-                    hash_index = 10
+                hash_index = 10
 
                 embed, file = embedded_score(data, str(user.id), "Selected Score to Delete", discord.Color.red())
-
                 class ConfirmDeleteButton(discord.ui.Button):
                     def __init__(self):
                         super().__init__(label="Delete", style=discord.ButtonStyle.danger)
 
+                    
                     async def callback(self, button_interaction: discord.Interaction):
                         # Actually delete the selected score
                         conn = sqlite3.connect(database)
@@ -228,7 +228,7 @@ async def deletescore(Interaction: discord.Interaction, song: str, isdouble: boo
         selected_row = results[0]
         if iscourse:
             data = extract_course_data_from_row(selected_row)
-            hash_index = 9
+            hash_index = 10
         else:
             data = extract_data_from_row(selected_row)
             hash_index = 10
@@ -537,7 +537,6 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
 
                 if isdouble:
                     data['style'] = 'double'
-                
 
                 #print(data)
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
@@ -949,7 +948,11 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
             async def callback(self, interaction: discord.Interaction):
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
-                data = extract_data_from_row(selected_row)
+                if iscourse:
+                    data = extract_course_data_from_row(selected_row)
+                    data['isCourse'] = iscourse
+                else:
+                    data = extract_data_from_row(selected_row)
                 data['gameMode'] = 'pump' if ispump else 'itg'
                 embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
@@ -963,12 +966,16 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
         selected_row = results[0]
-        data = extract_data_from_row(selected_row)
+        if iscourse:
+            data = extract_course_data_from_row(selected_row)
+            data['isCourse'] = iscourse
+        else:
+            data = extract_data_from_row(selected_row)
         data['gameMode'] = 'pump' if ispump else 'itg'
         embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
-
         view = View()
-        view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
+        if not iscourse:
+            view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
@@ -1078,6 +1085,11 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
     if data.get('prevBestEx') is None:
         data['prevBestEx'] = 0
 
+        if data.get('gameMode') == 'pump':
+            title = f"{title} - PUMP"
+        else:
+            title = f"{title} - ITG"
+
     if data.get('songName'):
         if data.get('scatterplotData') is None:
             embed = discord.Embed(title="Unable to recall score", color=color)
@@ -1091,11 +1103,6 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         else:
             style = 'S'
             
-        if data.get('gameMode') == 'pump':
-            title = f"{title} - PUMP"
-        else:
-            title = f"{title} - ITG"
-
         grade = data.get('grade')
         mapped_grade = grade_mapping.get(grade, grade)
         embed = discord.Embed(title=title, color=color)
@@ -1158,6 +1165,40 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
     else:
         title = f"{title} - ITG"
 
+    if data.get('isCourse'):
+        embed = discord.Embed(title=f"{title}", color=color)
+        embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
+        embed.add_field(name="Course Name", value=data.get('courseName'), inline=True)
+        embed.add_field(name="Pack", value=data.get('pack'), inline=True)
+        embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
+        embed.add_field(name="Date played", value=data.get('date'), inline=False)
+        embed.add_field(name="Scripter", value=data.get('scripter'), inline=True)
+        radar = data.get('radar')
+        if radar:
+            embed.add_field(name="Holds/Rolls/Mines", value=f"""
+                        Holds: {radar.get('Holds')[0]}/{radar.get('Holds')[1]}
+                        Rolls: {radar.get('Rolls')[0]}/{radar.get('Rolls')[1]}
+                        Mines: {radar.get('Mines')[0]}/{radar.get('Mines')[1]}""", inline=True)
+        else:
+            embed.add_field(name="Holds/Rolls/Mines", value="No radar data available", inline=True)
+        embed.add_field(name="Mods", value=data.get('mods'), inline=True)
+
+        entries = data.get('entries')
+        entries_str = ""
+        for entry in entries:
+            length_sec = int(round(float(entry.get('length', 0))))
+            mins = length_sec // 60
+            secs = length_sec % 60
+            entries_str += f"{entry.get('name', 'Unknown')} - {entry.get('artist', 'Unknown')} - {entry.get('difficulty', 'N/A')} - {mins}:{secs:02d}\n"
+        entries_str = entries_str.strip()  # Remove trailing newline
+        embed.add_field(name="Song | Artist | Diff | Length", value=entries_str, inline=True)
+
+        create_scatterplot_from_json(None, data.get('lifebarInfo'), output_file='scatterplot.png')
+        file = discord.File('scatterplot.png', filename='scatterplot.png')
+        embed.set_image(url="attachment://scatterplot.png")
+        return embed, file
+
+
     if data.get('worstWindow') is None:
         embed = discord.Embed(title="Unable to create breakdown", color=color)
         embed.add_field(name="Error", value="No judgement window data found for this score. Old score. If you want breakdown get better score :P", inline=False)
@@ -1165,8 +1206,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
         embed.set_image(url="attachment://lmao2.gif")
         return embed, file
 
-    grade = data.get('grade')
-    mapped_grade = grade_mapping.get(grade, grade)
+
     embed = discord.Embed(title=f"{title}", color=color)
     embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
@@ -1425,7 +1465,7 @@ def send_message():
                       (user_id, 
                        data.get('courseName'), 
                        data.get('pack'), 
-                       data.get('entries'), 
+                       str(data.get('entries')), 
                        data.get('scripter'), 
                        data.get('itgScore'), 
                        new_ex_score, 

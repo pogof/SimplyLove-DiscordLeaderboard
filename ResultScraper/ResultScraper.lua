@@ -472,23 +472,25 @@ local function CourseResultData(player, apiKey, style, gameMode)
         pack   = escapeString(course:GetGroupName()),
         difficulty = trail:GetMeter(),
         description = escapeString(course:GetDescription()),
-        entries = "[",
+        entries = "",
         hash = BinaryToHex(CRYPTMAN:SHA1File(course:GetCourseDir())):sub(1, 16),
         scripter = escapeString(course:GetScripter()),
         modifiers = comment(player)
     }
 
-
     local trailSteps = trail:GetTrailEntries()
+    local entries = {}
     for i in ipairs(trailSteps) do
-        courseInfo.entries = courseInfo.entries .. "{name: " .. escapeString(trailSteps[i]:GetSong():GetTranslitFullTitle()) .. ", length: " .. trailSteps[i]:GetSong():MusicLengthSeconds() .. ", artist: " .. escapeString(trailSteps[i]:GetSong():GetTranslitArtist()) .. ", difficulty:  " .. trailSteps[i]:GetSteps():GetMeter() .. "}," -- ", difficulty = " .. trailSteps:GetSteps():GetMeter() ..
+        table.insert(entries,
+            {
+                name = escapeString(trailSteps[i]:GetSong():GetTranslitFullTitle()),
+                length = trailSteps[i]:GetSong():MusicLengthSeconds(),
+                artist = escapeString(trailSteps[i]:GetSong():GetTranslitArtist()),
+                difficulty = trailSteps[i]:GetSteps():GetMeter()
+            }
+        )
     end
-    -- Remove the last comma and append the closing bracket
-    if courseInfo.entries:sub(-1) == "," then
-        courseInfo.entries = courseInfo.entries:sub(1, -2)
-    end
-    courseInfo.entries = courseInfo.entries .. "]"
-    
+    courseInfo.entries = encode(entries)   
 
     -- Result Data
     local resultInfo = {
@@ -506,7 +508,7 @@ local function CourseResultData(player, apiKey, style, gameMode)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": "%s", "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": %s, "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
         apiKey,
         courseInfo.name,
         courseInfo.pack,

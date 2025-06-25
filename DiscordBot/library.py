@@ -75,6 +75,7 @@ def extract_data_from_row(row):
         'grade': row[7],
         'length': row[8],
         'stepartist': row[9],
+        'hash': row[10],
         'scatterplotData': json.loads(row[11].replace("'", '"') if row[11] else '[]'),
         'lifebarInfo': json.loads(row[12].replace("'", '"') if row[12] else '[]'),
         'worstWindow': row[13],
@@ -88,7 +89,7 @@ def extract_course_data_from_row(row):
     return {
         'courseName': row[1],
         'pack': row[2],
-        'entries': row[3],
+        'entries': json.loads(row[3].replace("'", '"') if row[3] else '[]'),
         'scripter': row[4],
         'difficulty': row[5],
         'description': row[6],
