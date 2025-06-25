@@ -214,7 +214,7 @@ async def enable(interaction: discord.Interaction):
 #================================================================================================
 
 @client.tree.command(name="score", description="Recall score result from database.")
-async def score(interaction: discord.Interaction, song: str, isdouble: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+async def score(interaction: discord.Interaction, song: str, isdouble: bool = False, ispump: bool = False, user: discord.User = None, failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return
@@ -226,6 +226,8 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         tableType += 'SINGLES'
     if failed:
         tableType += 'FAILS'
+    if ispump:
+        tableType += '_PUMP'
     
     query = 'SELECT * FROM ' + tableType + ' WHERE 1=1'
 
@@ -279,6 +281,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 
                 if isdouble:
                     data['style'] = 'double'
+                data['gameMode'] = 'pump' if ispump else 'itg'
 
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
                 top_scores_message = get_top_scores(selected_row, interaction, 3, tableType)
@@ -286,7 +289,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 
                 # Add the breakdown button
                 view = View()
-                view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+                view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
                 await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
@@ -306,7 +309,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
 
         # Add the breakdown button
         view = View()
-        view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+        view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
@@ -382,6 +385,7 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
 
                 if isdouble:
                     data['style'] = 'double'
+                
 
                 #print(data)
                 embed, file = embedded_score(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
@@ -409,12 +413,13 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
 
 # Quick access to the score command from score that was submitted or recalled
 class ScoreButton(discord.ui.Button):
-    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, failed: bool, difficulty: int, pack: str, private: bool):
+    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, ispump: bool, failed: bool, difficulty: int, pack: str, private: bool):
         super().__init__(label="View Score", style=discord.ButtonStyle.primary)
         self.interaction = interaction
         self.song = song
         self.user = user
         self.isdouble = isdouble
+        self.ispump = ispump
         self.failed = failed
         self.difficulty = difficulty
         self.pack = pack
@@ -438,6 +443,7 @@ class ScoreButton(discord.ui.Button):
             song=self.song,
             user=self.user,
             isdouble=self.isdouble,
+            ispump=self.ispump,
             iscourse=False,
             failed=self.failed,
             difficulty=self.difficulty,
@@ -454,7 +460,7 @@ class ScoreButton(discord.ui.Button):
 
 @client.tree.command(name="compare", description="Compare two users' scores. If only one user is provided, it will compare their scores with yours.")
 @app_commands.describe(user_one="The first user to compare", user_two="The second user to compare (optional)", private="Whether the response should be private", order="The order asc/desc_ex, _alpha, _diff")
-async def compare(interaction: discord.Interaction, user_two: discord.User, user_one: discord.User = None, isdouble: bool = False, iscourse: bool = False, page: int = 1, order: str = "desc_ex", private: bool = True, pack: str = "", difficulty: int = 0, song_name: str = ""):
+async def compare(interaction: discord.Interaction, user_two: discord.User, user_one: discord.User = None, isdouble: bool = False, ispump: bool = False, iscourse: bool = False, page: int = 1, order: str = "desc_ex", private: bool = True, pack: str = "", difficulty: int = 0, song_name: str = ""):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return    
@@ -492,6 +498,8 @@ async def compare(interaction: discord.Interaction, user_two: discord.User, user
         tableType = 'DOUBLES'
     else:
         tableType = 'SINGLES'
+    if ispump:
+        tableType += '_PUMP'
 
     
     # Build the query with optional filters for difficulty and pack
@@ -596,7 +604,7 @@ async def compare_logic(interaction: discord.Interaction, page: int, order, priv
 
 @client.tree.command(name="unplayed", description="Returns a list of songs that you have not played.")
 @app_commands.describe(user_two="User to compare (optional)", private="Whether the response should be private", order="The order asc/desc_ex, _alpha")
-async def unplayed(interaction: discord.Interaction, user_two: discord.User = None, isdouble: bool = False, iscourse: bool = False, page: int = 1, order: str = "desc_alpha", private: bool = True, pack: str = "", difficulty: int = 0):
+async def unplayed(interaction: discord.Interaction, user_two: discord.User = None, isdouble: bool = False, ispump: bool = False, iscourse: bool = False, page: int = 1, order: str = "desc_alpha", private: bool = True, pack: str = "", difficulty: int = 0):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return    
@@ -621,6 +629,8 @@ async def unplayed(interaction: discord.Interaction, user_two: discord.User = No
         tableType = 'DOUBLES'
     else:
         tableType = 'SINGLES'
+    if ispump:
+        tableType += '_PUMP'
 
 
     # Build the query with optional filters for difficulty and pack
@@ -719,7 +729,7 @@ async def unplayed_logic(interaction: discord.Interaction, page: int, order, pri
 #================================================================================================
 
 @client.tree.command(name="breakdown", description="More in depth breakdown of a score.")
-async def breakdown(interaction: discord.Interaction, song: str, user: discord.User = None, isdouble: bool = False, iscourse: bool = False,  failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
+async def breakdown(interaction: discord.Interaction, song: str, user: discord.User = None, isdouble: bool = False, ispump: bool = False, iscourse: bool = False,  failed: bool = False, difficulty: int = 0, pack: str = "", private: bool = False):
     if interaction.guild is None:
         await interaction.response.send_message("This command can only be used in a server.")
         return
@@ -733,6 +743,9 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         tableType += 'SINGLES'
     if failed:
         tableType += 'FAILS'
+    if ispump:
+        tableType += '_PUMP'
+
     
     query = 'SELECT * FROM ' + tableType + ' WHERE 1=1'
     
@@ -784,10 +797,11 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
+                data['gameMode'] = 'pump' if ispump else 'itg'
                 embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
                 view = View()
-                view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+                view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
                 await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
@@ -797,10 +811,11 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
     else:
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
+        data['gameMode'] = 'pump' if ispump else 'itg'
         embed, file = embedded_breakdown(data, str(user.id), "Selected Score", discord.Color.red() if failed else discord.Color.dark_grey())
 
         view = View()
-        view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, failed, difficulty, pack, private))
+        view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
         await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
@@ -808,12 +823,13 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
 
 # Quick access to the breakdown command from score that was submitted or recalled
 class BreakdownButton(discord.ui.Button):
-    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, failed: bool, difficulty: int, pack: str, private: bool):
+    def __init__(self, interaction: discord.Interaction, song: str, user: discord.User, isdouble: bool, ispump: bool, failed: bool, difficulty: int, pack: str, private: bool):
         super().__init__(label="View Breakdown", style=discord.ButtonStyle.primary)
         self.interaction = interaction
         self.song = song
         self.user = user
         self.isdouble = isdouble
+        self.ispump = ispump
         self.failed = failed
         self.difficulty = difficulty
         self.pack = pack
@@ -837,6 +853,7 @@ class BreakdownButton(discord.ui.Button):
             song=self.song,
             user=self.user,
             isdouble=self.isdouble,
+            ispump=self.ispump,
             iscourse=False,  # Assuming this is not a course
             failed=self.failed,
             difficulty=self.difficulty,
@@ -982,6 +999,10 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
 
 def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Color.dark_grey()):
     
+    if data.get('gameMode') == 'pump':
+        title = f"{title} - PUMP"
+    else:
+        title = f"{title} - ITG"
 
     if data.get('worstWindow') is None:
         embed = discord.Embed(title="Unable to create breakdown", color=color)
@@ -1090,7 +1111,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     mean: {mean}ms
                     std dev*3: {std_dev_3}ms
                     max error: {max_error}ms
-                    Note that the numbers are rounded differently then in SL.""",
+                    (SL rounds differently)""",
                     inline=True)
     embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
@@ -1142,7 +1163,7 @@ def send_message():
 
     # Check if the request contains an API key
     if not api_key:
-        return jsonify({'status': 'Request is missing API Key.'}), 402
+        return jsonify({'status': 'Submission is missing API Key.'}), 402
 
     # Check if the API key exists in the database and fetch DiscordUser and submitDisabled
     conn = sqlite3.connect(database)
@@ -1159,25 +1180,25 @@ def send_message():
     required_keys_song = [
         'songName', 'artist', 'pack', 'length', 'stepartist', 'difficulty', 'description',
         'itgScore', 'exScore', 'grade', 'hash', 'scatterplotData', 'lifebarInfo',
-        'worstWindow', 'style', 'mods', 'radar'
+        'worstWindow', 'style', 'mods', 'radar', 'gameMode'
     ]
     required_keys_course = [
         'courseName', 'pack', 'entries', 'hash', 'scripter', 'itgScore', 'description',
-        'exScore', 'grade', 'lifebarInfo', 'style', 'mods', 'difficulty', 'radar'
+        'exScore', 'grade', 'lifebarInfo', 'style', 'mods', 'difficulty', 'radar', 'gameMode'
     ]
 
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
         
-        user = client.get_user(int(user_id))
+        # user = client.get_user(int(user_id))
 
-        asyncio.run_coroutine_threadsafe(
-        user.send(
-            "Your score was not submitted. Your submission is missing some data. Please update your module to the latest version to ensure all required data is sent."
-        ),
-        client.loop
-        )
+        # asyncio.run_coroutine_threadsafe(
+        # user.send(
+        #     "Your score was not submitted. Your submission is missing some data. Please update your module to the latest version to ensure all required data is sent."
+        # ),
+        # client.loop
+        # )
         print("Something is missing")
-        return jsonify({'status': 'Request is missing some data field(s).'}), 400
+        return jsonify({'status': 'Submission is missing data. Update module to the latest version.'}), 400
     
     isPB = True
     tableType = ''
@@ -1355,7 +1376,7 @@ def send_message():
             )
 
     conn.close()
-    return jsonify({'status': 'success'}), 200
+    return jsonify({'status': 'Submission has been successfully inserted.'}), 200
 
 #================================================================================================
 # Run Flask, run Discord bot
