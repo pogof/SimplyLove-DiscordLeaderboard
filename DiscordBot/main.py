@@ -11,6 +11,8 @@ import threading
 import asyncio
 import numpy as np
 import os
+import sys
+import logging
 from dotenv import load_dotenv
 
 from library import *
@@ -19,6 +21,20 @@ import json
 
 load_dotenv()
 
+# Configure logging for Docker visibility
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Force stdout to be unbuffered for Docker
+sys.stdout.reconfigure(line_buffering=True)
+
+logger = logging.getLogger(__name__)
+
 
 #================================================================================================
 # Set up the Discord bot and Flask app
@@ -26,6 +42,10 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__) #TODO: Change this to your app name
+
+# Configure Flask logging
+app.logger.setLevel(logging.INFO)
+app.logger.addHandler(logging.StreamHandler(sys.stdout))
 
 # Initialize Discord bot
 intents = discord.Intents.default()
@@ -1395,11 +1415,16 @@ def send_message():
         scatter_chunks = data.get('scatterplotChunks', 0)
         lifebar_chunks = data.get('lifebarChunks', 0)
         
-        print(f"Processing chunked submission for hash {hash_key}")
-        print(f"Expected chunks - Scatterplot: {scatter_chunks}, Lifebar: {lifebar_chunks}")
+        logger.info(f"Processing chunked submission for hash {hash_key}")
+        logger.info(f"Expected chunks - Scatterplot: {scatter_chunks}, Lifebar: {lifebar_chunks}")
+        logger.info(f"Available pending chunks: {list(pending_chunks.keys())}")
         
         # Reconstruct scatterplotData if we have chunks
-        if scatter_chunks > 0 and hash_key in pending_chunks:
+        if scatter_chunks > 0:
+            if hash_key not in pending_chunks:
+                logger.error(f"Hash {hash_key} not found in pending chunks")
+                return jsonify({'status': f'No chunks found for hash {hash_key}. Chunks may have timed out.'}), 400
+                
             scatterplot_data = []
             scatter_chunk_dict = pending_chunks[hash_key]['scatterplot']
             
@@ -1409,14 +1434,18 @@ def send_message():
                     if i in scatter_chunk_dict:
                         scatterplot_data.extend(scatter_chunk_dict[i])
                 data['scatterplotData'] = scatterplot_data
-                print(f"Reconstructed scatterplot data: {len(scatterplot_data)} points")
+                logger.info(f"Reconstructed scatterplot data: {len(scatterplot_data)} points")
             else:
                 missing_chunks = [i for i in range(1, scatter_chunks + 1) if i not in scatter_chunk_dict]
-                print(f"Missing scatterplot chunks: {missing_chunks}")
+                logger.error(f"Missing scatterplot chunks: {missing_chunks}")
                 return jsonify({'status': f'Missing scatterplot chunks: {missing_chunks}'}), 400
         
         # Reconstruct lifebarInfo if we have chunks
-        if lifebar_chunks > 0 and hash_key in pending_chunks:
+        if lifebar_chunks > 0:
+            if hash_key not in pending_chunks:
+                logger.error(f"Hash {hash_key} not found in pending chunks")
+                return jsonify({'status': f'No chunks found for hash {hash_key}. Chunks may have timed out.'}), 400
+                
             lifebar_data = []
             lifebar_chunk_dict = pending_chunks[hash_key]['lifebar']
             
@@ -1426,16 +1455,16 @@ def send_message():
                     if i in lifebar_chunk_dict:
                         lifebar_data.extend(lifebar_chunk_dict[i])
                 data['lifebarInfo'] = lifebar_data
-                print(f"Reconstructed lifebar data: {len(lifebar_data)} points")
+                logger.info(f"Reconstructed lifebar data: {len(lifebar_data)} points")
             else:
                 missing_chunks = [i for i in range(1, lifebar_chunks + 1) if i not in lifebar_chunk_dict]
-                print(f"Missing lifebar chunks: {missing_chunks}")
+                logger.error(f"Missing lifebar chunks: {missing_chunks}")
                 return jsonify({'status': f'Missing lifebar chunks: {missing_chunks}'}), 400
         
         # Clean up chunks after reconstruction
         if hash_key in pending_chunks:
             del pending_chunks[hash_key]
-            print(f"Cleaned up chunks for hash {hash_key}")
+            logger.info(f"Cleaned up chunks for hash {hash_key}")
 
     # Check if the request contains all required data
     required_keys_song = [
@@ -1459,7 +1488,21 @@ def send_message():
         if 'lifebarInfo' not in data:
             required_keys_course.append('lifebarInfo')
 
+    # Debug: Check what data we have after chunk reconstruction
+    if data.get('isChunked'):
+        logger.info(f"After chunk reconstruction, data keys: {list(data.keys())}")
+        logger.info(f"Has scatterplotData: {'scatterplotData' in data}")
+        logger.info(f"Has lifebarInfo: {'lifebarInfo' in data}")
+    
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
+        
+        # Debug: Show which keys are missing
+        if data.get('songName'):
+            missing_song_keys = [key for key in required_keys_song if key not in data]
+            logger.error(f"Missing song keys: {missing_song_keys}")
+        if data.get('courseName'):
+            missing_course_keys = [key for key in required_keys_course if key not in data]
+            logger.error(f"Missing course keys: {missing_course_keys}")
         
         # user = client.get_user(int(user_id))
 
@@ -1469,7 +1512,7 @@ def send_message():
         # ),
         # client.loop
         # )
-        print("Something is missing")
+        logger.error("Submission missing required data")
         return jsonify({'status': 'Submission is missing data. Update module to the latest version.'}), 400
     
     isPB = True
@@ -1693,7 +1736,7 @@ def receive_chunk():
     
     # Check if we have all chunks for this type
     received_chunks = len(pending_chunks[hash_key][chunk_type])
-    print(f"Received {chunk_type} chunk {chunk_index}/{total_chunks} for hash {hash_key}")
+    logger.info(f"Received {chunk_type} chunk {chunk_index}/{total_chunks} for hash {hash_key}")
     
     return jsonify({'status': f'Chunk {chunk_index}/{total_chunks} received successfully.'}), 200
 
@@ -1704,8 +1747,16 @@ def receive_chunk():
 
 # Run Flask app in a separate thread
 def run_flask():
-    app.run(host='0.0.0.0', port=5000)
+    # Disable Flask's default logging to avoid conflicts
+    import logging as flask_logging
+    werkzeug_logger = flask_logging.getLogger('werkzeug')
+    werkzeug_logger.setLevel(flask_logging.ERROR)
+    
+    logger.info("Starting Flask server on port 5000...")
+    app.run(host='0.0.0.0', port=5000, debug=False)
+
 threading.Thread(target=run_flask).start()
 
+logger.info("Starting Discord bot...")
 bot_token = os.getenv('DISCORD_BOT_TOKEN')
 client.run(bot_token)
