@@ -185,8 +185,16 @@ local function encodeValue(value)
             end
             return "[" .. table.concat(result, ",") .. "]"
         else
-            for k, v in pairs(value) do
-                table.insert(result, '"' .. escapeString(k) .. '":' .. encodeValue(v))
+            -- Special handling for scatterplot data points to maintain x, y, color order
+            if value.x and value.y and value.color then
+                table.insert(result, '"x":' .. encodeValue(value.x))
+                table.insert(result, '"y":' .. encodeValue(value.y))
+                table.insert(result, '"color":' .. encodeValue(value.color))
+            else
+                -- Use original method for other objects
+                for k, v in pairs(value) do
+                    table.insert(result, '"' .. escapeString(k) .. '":' .. encodeValue(v))
+                end
             end
             return "{" .. table.concat(result, ",") .. "}"
         end
@@ -301,67 +309,119 @@ local function sendDataInChunks(data, botURL, callback)
     
     local mainData = encode(decoded)
     
-    -- Send main data first
-    debugPrint("Sending main data chunk")
-    sendData(mainData, botURL, function(code, body)
-        if code ~= 200 then
-            debugPrint("Failed to send main data: " .. tostring(code) .. " - " .. tostring(body))
-            if callback then callback(code, body) end
-            return
+    -- Smart URL handling - ensure we have the right endpoints
+    local baseURL = botURL
+    local chunkURL, sendURL
+    
+    if string.match(baseURL, "/send$") then
+        -- If URL ends with /send, use base for send and base-without-send + /chunk for chunks
+        sendURL = baseURL
+        chunkURL = string.gsub(baseURL, "/send$", "/chunk")
+    else
+        -- If URL doesn't end with /send, assume it's base URL
+        if string.match(baseURL, "/$") then
+            -- URL ends with /, just append endpoints
+            sendURL = baseURL .. "send"
+            chunkURL = baseURL .. "chunk"
+        else
+            -- URL doesn't end with /, add / and endpoints
+            sendURL = baseURL .. "/send"
+            chunkURL = baseURL .. "/chunk"
         end
+    end
+    
+    debugPrint("Using URLs - Chunks: " .. chunkURL .. ", Main data: " .. sendURL)
+    debugPrint("Sending " .. scatterChunks .. " scatterplot chunks and " .. lifebarChunks .. " lifebar chunks first, then main data")
+    
+    local chunksToSend = scatterChunks + lifebarChunks
+    local chunksCompleted = 0
+    local hasError = false
+    
+    local function checkAllChunksSent()
+        chunksCompleted = chunksCompleted + 1
+        debugPrint("Chunk completed: " .. chunksCompleted .. "/" .. chunksToSend)
         
-        debugPrint("Main data sent successfully, sending " .. scatterChunks .. " scatterplot chunks and " .. lifebarChunks .. " lifebar chunks")
-        
-        -- Send scatterplot chunks
-        if scatterplotData then
-            for i = 1, scatterChunks do
-                local startIdx = (i - 1) * chunkSize + 1
-                local endIdx = math.min(i * chunkSize, #scatterplotData)
-                local chunk = {}
-                for j = startIdx, endIdx do
-                    table.insert(chunk, scatterplotData[j])
-                end
-                
-                local chunkData = encode({
-                    hash = decoded.hash,
-                    api_key = decoded.api_key,
-                    chunkType = "scatterplot",
-                    chunkIndex = i,
-                    totalChunks = scatterChunks,
-                    data = chunk
-                })
-                
-                debugPrint("Sending scatterplot chunk " .. i .. "/" .. scatterChunks .. " (" .. #chunk .. " points)")
-                sendData(chunkData, botURL .. "/chunk", nil)
+        if chunksCompleted >= chunksToSend and not hasError then
+            debugPrint("All chunks sent successfully, now sending main data")
+            sendData(mainData, sendURL, callback)
+        end
+    end
+    
+    local function handleChunkError(code, body, chunkType, chunkIndex)
+        if not hasError then
+            hasError = true
+            debugPrint("Failed to send " .. chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(code) .. " - " .. tostring(body))
+            if callback then 
+                callback(code, "Failed to send " .. chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(body)) 
             end
         end
-        
-        -- Send lifebar chunks
-        if lifebarInfo then
-            for i = 1, lifebarChunks do
-                local startIdx = (i - 1) * chunkSize + 1
-                local endIdx = math.min(i * chunkSize, #lifebarInfo)
-                local chunk = {}
-                for j = startIdx, endIdx do
-                    table.insert(chunk, lifebarInfo[j])
-                end
-                
-                local chunkData = encode({
-                    hash = decoded.hash,
-                    api_key = decoded.api_key,
-                    chunkType = "lifebar",
-                    chunkIndex = i,
-                    totalChunks = lifebarChunks,
-                    data = chunk
-                })
-                
-                debugPrint("Sending lifebar chunk " .. i .. "/" .. lifebarChunks .. " (" .. #chunk .. " points)")
-                sendData(chunkData, botURL .. "/chunk", nil)
+    end
+    
+    -- Send scatterplot chunks first
+    if scatterplotData then
+        for i = 1, scatterChunks do
+            local startIdx = (i - 1) * chunkSize + 1
+            local endIdx = math.min(i * chunkSize, #scatterplotData)
+            local chunk = {}
+            for j = startIdx, endIdx do
+                table.insert(chunk, scatterplotData[j])
             end
+            
+            local chunkData = encode({
+                hash = decoded.hash,
+                api_key = decoded.api_key,
+                chunkType = "scatterplot",
+                chunkIndex = i,
+                totalChunks = scatterChunks,
+                data = chunk
+            })
+            
+            debugPrint("Sending scatterplot chunk " .. i .. "/" .. scatterChunks .. " (" .. #chunk .. " points)")
+            sendData(chunkData, chunkURL, function(code, body)
+                if code == 200 then
+                    checkAllChunksSent()
+                else
+                    handleChunkError(code, body, "scatterplot", i)
+                end
+            end)
         end
-        
-        if callback then callback(200, "Data sent in chunks successfully") end
-    end)
+    end
+    
+    -- Send lifebar chunks
+    if lifebarInfo then
+        for i = 1, lifebarChunks do
+            local startIdx = (i - 1) * chunkSize + 1
+            local endIdx = math.min(i * chunkSize, #lifebarInfo)
+            local chunk = {}
+            for j = startIdx, endIdx do
+                table.insert(chunk, lifebarInfo[j])
+            end
+            
+            local chunkData = encode({
+                hash = decoded.hash,
+                api_key = decoded.api_key,
+                chunkType = "lifebar",
+                chunkIndex = i,
+                totalChunks = lifebarChunks,
+                data = chunk
+            })
+            
+            debugPrint("Sending lifebar chunk " .. i .. "/" .. lifebarChunks .. " (" .. #chunk .. " points)")
+            sendData(chunkData, chunkURL, function(code, body)
+                if code == 200 then
+                    checkAllChunksSent()
+                else
+                    handleChunkError(code, body, "lifebar", i)
+                end
+            end)
+        end
+    end
+    
+    -- If no chunks to send, send main data immediately
+    if chunksToSend == 0 then
+        debugPrint("No chunks to send, sending main data immediately")
+        sendData(mainData, sendURL, callback)
+    end
 end
 
 --------------------------------------------------------------------------------------------------
