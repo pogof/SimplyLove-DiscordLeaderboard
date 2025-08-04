@@ -165,6 +165,11 @@ async def deletescore(Interaction: discord.Interaction, song: str, isdouble: boo
         return
 
     if len(results) > 1:
+        # Check if there are too many results
+        if len(results) > 25:
+            await Interaction.response.send_message("Too many results to pick from. Please be more specific.", ephemeral=True)
+            return
+            
         # Prepare select options using correct columns for course/song
         options = []
         for index, row in enumerate(results):
@@ -413,6 +418,10 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         return
 
     if len(results) > 1:
+        # Check if there are too many results
+        if len(results) > 25:
+            await interaction.response.send_message("Too many results to pick from. Please be more specific.", ephemeral=True)
+            return
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
@@ -517,6 +526,11 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
         return
 
     if len(results) > 1:
+        # Check if there are too many results
+        if len(results) > 25:
+            await interaction.response.send_message("Too many results to pick from. Please be more specific.", ephemeral=True)
+            return
+            
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
@@ -932,6 +946,11 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         return
 
     if len(results) > 1:
+        # Check if there are too many results
+        if len(results) > 25:
+            await interaction.response.send_message("Too many results to pick from. Please be more specific.", ephemeral=True)
+            return
+            
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
