@@ -456,6 +456,8 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
                 super().__init__(placeholder="Choose a score...", options=options)
 
             async def callback(self, interaction: discord.Interaction):
+                await interaction.response.defer(ephemeral=private)
+                
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 data = extract_data_from_row(selected_row)
@@ -472,12 +474,14 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
                 view = View()
                 view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
-                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
+                await interaction.followup.send(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
         await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
+        await interaction.response.defer(ephemeral=private)
+        
         selected_row = results[0]
         data = extract_data_from_row(selected_row)
 
@@ -492,7 +496,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         view = View()
         view.add_item(BreakdownButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
-        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
+        await interaction.followup.send(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
 #================================================================================================
 # Recall course result
@@ -985,6 +989,8 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 super().__init__(placeholder="Choose a score...", options=options)
 
             async def callback(self, interaction: discord.Interaction):
+                await interaction.response.defer(ephemeral=private)
+                
                 selected_index = int(self.values[0])
                 selected_row = results[selected_index]
                 if iscourse:
@@ -998,12 +1004,14 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
                 view = View()
                 view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
-                await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
+                await interaction.followup.send(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
         view = discord.ui.View()
         view.add_item(ScoreSelect())
         await interaction.response.send_message("Multiple scores found. Please select one:", view=view, ephemeral=True)
     else:
+        await interaction.response.defer(ephemeral=private)
+        
         selected_row = results[0]
         if iscourse:
             data = extract_course_data_from_row(selected_row)
@@ -1016,7 +1024,7 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         if not iscourse:
             view.add_item(ScoreButton(interaction, data['songName'], user, isdouble, ispump, failed, difficulty, pack, private))
 
-        await interaction.response.send_message(content=None, embed=embed, file=file, ephemeral=private, view=view)
+        await interaction.followup.send(content=None, embed=embed, file=file, ephemeral=private, view=view)
 
 
 
@@ -1160,7 +1168,9 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
         # Create the scatter plot and save it as an image
+        logging.info(f"Starting scatterplot creation for song: {data.get('songName')}")
         create_scatterplot_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='scatterplot.png')
+        logging.info(f"Completed scatterplot creation for song: {data.get('songName')}")
 
         # Send the embed with the image attachment
         file = discord.File('scatterplot.png', filename='scatterplot.png')
@@ -1348,7 +1358,9 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
                     inline=True)
     embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
+    logging.info(f"Starting distribution plot creation for song: {data.get('songName')}")
     create_distribution_from_json(data.get('scatterplotData'), data.get('worstWindow'), output_file='distribution.png')
+    logging.info(f"Completed distribution plot creation for song: {data.get('songName')}")
     # Send the embed with the image attachment
     file = discord.File('distribution.png', filename='distribution.png')
     embed.set_image(url="attachment://distribution.png")

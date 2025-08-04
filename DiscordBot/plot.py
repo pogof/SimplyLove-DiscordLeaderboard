@@ -11,6 +11,12 @@ from library import *
 #================================================================================================
 
 def create_scatterplot_from_json(data, lifebar_info, output_file='scatterplot.png'):
+    import logging
+    
+    # Log data point counts for debugging
+    data_points = len(data) if data else 0
+    lifebar_points = len(lifebar_info) if lifebar_info else 0
+    logging.info(f"Creating scatterplot with {data_points} data points and {lifebar_points} lifebar points")
 
     # Set plot size
     fig, ax2 = plt.subplots(figsize=(10, 2))  # Size in inches (1000x200 pixels)
@@ -83,6 +89,11 @@ def create_scatterplot_from_json(data, lifebar_info, output_file='scatterplot.pn
 #================================================================================================
 
 def create_distribution_from_json(data, worstWindow,  output_file='distribution.png'):
+    import logging
+    
+    # Log data point counts for debugging
+    data_points = len(data) if data else 0
+    logging.info(f"Creating distribution plot with {data_points} data points")
 
     # Assuming x_values and y_values are already defined
     y_values = [point['y'] for point in data if point['y'] not in [0, 200]]
