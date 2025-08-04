@@ -1370,16 +1370,75 @@ def send_message():
 
     user_id, submit_disabled = result
 
+    # Handle chunked data reconstruction
+    if data.get('isChunked'):
+        hash_key = data.get('hash')
+        scatter_chunks = data.get('scatterplotChunks', 0)
+        lifebar_chunks = data.get('lifebarChunks', 0)
+        
+        print(f"Processing chunked submission for hash {hash_key}")
+        print(f"Expected chunks - Scatterplot: {scatter_chunks}, Lifebar: {lifebar_chunks}")
+        
+        # Reconstruct scatterplotData if we have chunks
+        if scatter_chunks > 0 and hash_key in pending_chunks:
+            scatterplot_data = []
+            scatter_chunk_dict = pending_chunks[hash_key]['scatterplot']
+            
+            # Check if we have all scatterplot chunks
+            if len(scatter_chunk_dict) == scatter_chunks:
+                for i in range(1, scatter_chunks + 1):
+                    if i in scatter_chunk_dict:
+                        scatterplot_data.extend(scatter_chunk_dict[i])
+                data['scatterplotData'] = scatterplot_data
+                print(f"Reconstructed scatterplot data: {len(scatterplot_data)} points")
+            else:
+                missing_chunks = [i for i in range(1, scatter_chunks + 1) if i not in scatter_chunk_dict]
+                print(f"Missing scatterplot chunks: {missing_chunks}")
+                return jsonify({'status': f'Missing scatterplot chunks: {missing_chunks}'}), 400
+        
+        # Reconstruct lifebarInfo if we have chunks
+        if lifebar_chunks > 0 and hash_key in pending_chunks:
+            lifebar_data = []
+            lifebar_chunk_dict = pending_chunks[hash_key]['lifebar']
+            
+            # Check if we have all lifebar chunks
+            if len(lifebar_chunk_dict) == lifebar_chunks:
+                for i in range(1, lifebar_chunks + 1):
+                    if i in lifebar_chunk_dict:
+                        lifebar_data.extend(lifebar_chunk_dict[i])
+                data['lifebarInfo'] = lifebar_data
+                print(f"Reconstructed lifebar data: {len(lifebar_data)} points")
+            else:
+                missing_chunks = [i for i in range(1, lifebar_chunks + 1) if i not in lifebar_chunk_dict]
+                print(f"Missing lifebar chunks: {missing_chunks}")
+                return jsonify({'status': f'Missing lifebar chunks: {missing_chunks}'}), 400
+        
+        # Clean up chunks after reconstruction
+        if hash_key in pending_chunks:
+            del pending_chunks[hash_key]
+            print(f"Cleaned up chunks for hash {hash_key}")
+
     # Check if the request contains all required data
     required_keys_song = [
         'songName', 'artist', 'pack', 'length', 'stepartist', 'difficulty', 'description',
-        'itgScore', 'exScore', 'grade', 'hash', 'scatterplotData', 'lifebarInfo',
-        'worstWindow', 'style', 'mods', 'radar', 'gameMode'
+        'itgScore', 'exScore', 'grade', 'hash', 'worstWindow', 'style', 'mods', 'radar', 'gameMode'
     ]
     required_keys_course = [
         'courseName', 'pack', 'entries', 'hash', 'scripter', 'itgScore', 'description',
-        'exScore', 'grade', 'lifebarInfo', 'style', 'mods', 'difficulty', 'radar', 'gameMode'
+        'exScore', 'grade', 'style', 'mods', 'difficulty', 'radar', 'gameMode'
     ]
+    
+    # For songs, also require scatterplotData and lifebarInfo (unless reconstructed from chunks)
+    if data.get('songName'):
+        if 'scatterplotData' not in data:
+            required_keys_song.append('scatterplotData')
+        if 'lifebarInfo' not in data:
+            required_keys_song.append('lifebarInfo')
+    
+    # For courses, also require lifebarInfo (unless reconstructed from chunks)  
+    if data.get('courseName'):
+        if 'lifebarInfo' not in data:
+            required_keys_course.append('lifebarInfo')
 
     if not (all(key in data for key in required_keys_song) or all(key in data for key in required_keys_course)):
         
@@ -1571,6 +1630,53 @@ def send_message():
 
     conn.close()
     return jsonify({'status': 'Submission has been successfully inserted.'}), 200
+
+# Global storage for pending chunks
+pending_chunks = {}
+
+@app.route('/chunk', methods=['POST'])
+def receive_chunk():
+    data = request.json
+    api_key = data.get('api_key')
+    
+    # Check if the request contains an API key
+    if not api_key:
+        return jsonify({'status': 'Chunk is missing API Key.'}), 402
+    
+    # Check if the API key exists in the database
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute('SELECT DiscordUser, submitDisabled FROM USERS WHERE APIKey = ?', (api_key,))
+    result = c.fetchone()
+    conn.close()
+    if not result:
+        return jsonify({'status': 'API Key has not been found in database.'}), 403
+    
+    # Extract chunk information
+    hash_key = data.get('hash')
+    chunk_type = data.get('chunkType')  # 'scatterplot' or 'lifebar'
+    chunk_index = data.get('chunkIndex')
+    total_chunks = data.get('totalChunks')
+    chunk_data = data.get('data')
+    
+    if not all([hash_key, chunk_type, chunk_index, total_chunks, chunk_data]):
+        return jsonify({'status': 'Chunk is missing required data.'}), 400
+    
+    # Initialize storage for this hash if needed
+    if hash_key not in pending_chunks:
+        pending_chunks[hash_key] = {
+            'scatterplot': {},
+            'lifebar': {}
+        }
+    
+    # Store the chunk
+    pending_chunks[hash_key][chunk_type][chunk_index] = chunk_data
+    
+    # Check if we have all chunks for this type
+    received_chunks = len(pending_chunks[hash_key][chunk_type])
+    print(f"Received {chunk_type} chunk {chunk_index}/{total_chunks} for hash {hash_key}")
+    
+    return jsonify({'status': f'Chunk {chunk_index}/{total_chunks} received successfully.'}), 200
 
 #================================================================================================
 # Run Flask, run Discord bot
