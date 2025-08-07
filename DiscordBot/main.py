@@ -13,6 +13,7 @@ import numpy as np
 import os
 import sys
 import logging
+import time
 from dotenv import load_dotenv
 
 from library import *
@@ -1437,54 +1438,24 @@ def send_message():
         
         logger.info(f"Processing chunked submission for hash {hash_key}")
         logger.info(f"Expected chunks - Scatterplot: {scatter_chunks}, Lifebar: {lifebar_chunks}")
-        logger.info(f"Available pending chunks: {list(pending_chunks.keys())}")
         
-        # Reconstruct scatterplotData if we have chunks
-        if scatter_chunks > 0:
-            if hash_key not in pending_chunks:
-                logger.error(f"Hash {hash_key} not found in pending chunks")
-                return jsonify({'status': f'No chunks found for hash {hash_key}. Chunks may have timed out.'}), 400
-                
-            scatterplot_data = []
-            scatter_chunk_dict = pending_chunks[hash_key]['scatterplot']
-            
-            # Check if we have all scatterplot chunks
-            if len(scatter_chunk_dict) == scatter_chunks:
-                for i in range(1, scatter_chunks + 1):
-                    if i in scatter_chunk_dict:
-                        scatterplot_data.extend(scatter_chunk_dict[i])
-                data['scatterplotData'] = scatterplot_data
-                logger.info(f"Reconstructed scatterplot data: {len(scatterplot_data)} points")
-            else:
-                missing_chunks = [i for i in range(1, scatter_chunks + 1) if i not in scatter_chunk_dict]
-                logger.error(f"Missing scatterplot chunks: {missing_chunks}")
-                return jsonify({'status': f'Missing scatterplot chunks: {missing_chunks}'}), 400
+        # Reconstruct data using thread-safe chunk manager
+        scatter_data, lifebar_data, error = chunk_manager.get_and_remove_chunks(
+            user_id, hash_key, scatter_chunks, lifebar_chunks
+        )
         
-        # Reconstruct lifebarInfo if we have chunks
-        if lifebar_chunks > 0:
-            if hash_key not in pending_chunks:
-                logger.error(f"Hash {hash_key} not found in pending chunks")
-                return jsonify({'status': f'No chunks found for hash {hash_key}. Chunks may have timed out.'}), 400
-                
-            lifebar_data = []
-            lifebar_chunk_dict = pending_chunks[hash_key]['lifebar']
-            
-            # Check if we have all lifebar chunks
-            if len(lifebar_chunk_dict) == lifebar_chunks:
-                for i in range(1, lifebar_chunks + 1):
-                    if i in lifebar_chunk_dict:
-                        lifebar_data.extend(lifebar_chunk_dict[i])
-                data['lifebarInfo'] = lifebar_data
-                logger.info(f"Reconstructed lifebar data: {len(lifebar_data)} points")
-            else:
-                missing_chunks = [i for i in range(1, lifebar_chunks + 1) if i not in lifebar_chunk_dict]
-                logger.error(f"Missing lifebar chunks: {missing_chunks}")
-                return jsonify({'status': f'Missing lifebar chunks: {missing_chunks}'}), 400
+        if error:
+            logger.error(f"Chunk reconstruction failed: {error}")
+            return jsonify({'status': f'Chunk reconstruction failed: {error}'}), 400
         
-        # Clean up chunks after reconstruction
-        if hash_key in pending_chunks:
-            del pending_chunks[hash_key]
-            logger.info(f"Cleaned up chunks for hash {hash_key}")
+        # Add reconstructed data to the main data object
+        if scatter_data is not None:
+            data['scatterplotData'] = scatter_data
+            logger.info(f"Reconstructed scatterplot data: {len(scatter_data)} points")
+        
+        if lifebar_data is not None:
+            data['lifebarInfo'] = lifebar_data
+            logger.info(f"Reconstructed lifebar data: {len(lifebar_data)} points")
 
     # Check if the request contains all required data
     required_keys_song = [
@@ -1713,8 +1684,116 @@ def send_message():
     conn.close()
     return jsonify({'status': 'Submission has been successfully inserted.'}), 200
 
-# Global storage for pending chunks
-pending_chunks = {}
+# Global storage for pending chunks with threading support
+from collections import defaultdict
+
+class ChunkManager:
+    def __init__(self):
+        self.chunks = {}
+        self.lock = threading.RLock()
+        self.chunk_timestamps = {}
+        self.cleanup_interval = 300  # 5 minutes timeout
+        
+    def store_chunk(self, user_id, hash_key, chunk_type, chunk_index, chunk_data, total_chunks):
+        """Store a chunk with thread safety"""
+        composite_key = f"{user_id}:{hash_key}"
+        
+        with self.lock:
+            current_time = time.time()
+            
+            # Initialize storage for this user+hash combination
+            if composite_key not in self.chunks:
+                self.chunks[composite_key] = {
+                    'scatterplot': {},
+                    'lifebar': {},
+                    'total_chunks': {'scatterplot': 0, 'lifebar': 0}
+                }
+                self.chunk_timestamps[composite_key] = current_time
+            
+            # Update timestamp
+            self.chunk_timestamps[composite_key] = current_time
+            
+            # Store total chunks info
+            self.chunks[composite_key]['total_chunks'][chunk_type] = total_chunks
+            
+            # Store the chunk
+            self.chunks[composite_key][chunk_type][chunk_index] = chunk_data
+            
+            received_count = len(self.chunks[composite_key][chunk_type])
+            return received_count, total_chunks
+    
+    def get_and_remove_chunks(self, user_id, hash_key, scatter_chunks, lifebar_chunks):
+        """Get complete chunks and remove from storage"""
+        composite_key = f"{user_id}:{hash_key}"
+        
+        with self.lock:
+            if composite_key not in self.chunks:
+                return None, None, "No chunks found"
+            
+            chunk_data = self.chunks[composite_key]
+            
+            # Check if we have all required chunks
+            scatter_data = []
+            lifebar_data = []
+            
+            if scatter_chunks > 0:
+                if len(chunk_data['scatterplot']) != scatter_chunks:
+                    missing = [i for i in range(1, scatter_chunks + 1) 
+                             if i not in chunk_data['scatterplot']]
+                    return None, None, f"Missing scatterplot chunks: {missing}"
+                
+                # Reconstruct scatterplot data in order
+                for i in range(1, scatter_chunks + 1):
+                    scatter_data.extend(chunk_data['scatterplot'][i])
+            
+            if lifebar_chunks > 0:
+                if len(chunk_data['lifebar']) != lifebar_chunks:
+                    missing = [i for i in range(1, lifebar_chunks + 1) 
+                             if i not in chunk_data['lifebar']]
+                    return None, None, f"Missing lifebar chunks: {missing}"
+                
+                # Reconstruct lifebar data in order
+                for i in range(1, lifebar_chunks + 1):
+                    lifebar_data.extend(chunk_data['lifebar'][i])
+            
+            # Clean up
+            del self.chunks[composite_key]
+            del self.chunk_timestamps[composite_key]
+            
+            return scatter_data if scatter_chunks > 0 else None, \
+                   lifebar_data if lifebar_chunks > 0 else None, \
+                   None
+    
+    def cleanup_expired_chunks(self):
+        """Remove chunks older than cleanup_interval"""
+        current_time = time.time()
+        
+        with self.lock:
+            expired_keys = [
+                key for key, timestamp in self.chunk_timestamps.items()
+                if current_time - timestamp > self.cleanup_interval
+            ]
+            
+            for key in expired_keys:
+                if key in self.chunks:
+                    del self.chunks[key]
+                if key in self.chunk_timestamps:
+                    del self.chunk_timestamps[key]
+                    
+            if expired_keys:
+                logger.info(f"Cleaned up {len(expired_keys)} expired chunk sets")
+
+# Global chunk manager
+chunk_manager = ChunkManager()
+
+# Start cleanup thread
+def chunk_cleanup_worker():
+    while True:
+        time.sleep(60)  # Run cleanup every minute
+        chunk_manager.cleanup_expired_chunks()
+
+cleanup_thread = threading.Thread(target=chunk_cleanup_worker, daemon=True)
+cleanup_thread.start()
 
 @app.route('/chunk', methods=['POST'])
 def receive_chunk():
@@ -1734,6 +1813,8 @@ def receive_chunk():
     if not result:
         return jsonify({'status': 'API Key has not been found in database.'}), 403
     
+    user_id, _ = result
+    
     # Extract chunk information
     hash_key = data.get('hash')
     chunk_type = data.get('chunkType')  # 'scatterplot' or 'lifebar'
@@ -1744,21 +1825,14 @@ def receive_chunk():
     if not all([hash_key, chunk_type, chunk_index, total_chunks, chunk_data]):
         return jsonify({'status': 'Chunk is missing required data.'}), 400
     
-    # Initialize storage for this hash if needed
-    if hash_key not in pending_chunks:
-        pending_chunks[hash_key] = {
-            'scatterplot': {},
-            'lifebar': {}
-        }
+    # Store chunk using thread-safe manager
+    received_count, total_count = chunk_manager.store_chunk(
+        user_id, hash_key, chunk_type, chunk_index, chunk_data, total_chunks
+    )
     
-    # Store the chunk
-    pending_chunks[hash_key][chunk_type][chunk_index] = chunk_data
+    logger.info(f"Received {chunk_type} chunk {chunk_index}/{total_chunks} for user {user_id}, hash {hash_key}")
     
-    # Check if we have all chunks for this type
-    received_chunks = len(pending_chunks[hash_key][chunk_type])
-    logger.info(f"Received {chunk_type} chunk {chunk_index}/{total_chunks} for hash {hash_key}")
-    
-    return jsonify({'status': f'Chunk {chunk_index}/{total_chunks} received successfully.'}), 200
+    return jsonify({'status': f'Chunk {chunk_index}/{total_chunks} received successfully. ({received_count}/{total_count} {chunk_type} chunks received)'}), 200
 
 #================================================================================================
 # Run Flask, run Discord bot
