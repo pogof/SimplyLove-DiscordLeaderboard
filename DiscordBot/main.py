@@ -19,6 +19,9 @@ from library import *
 from plot import *
 import json
 
+
+version = "1.3.0"
+
 load_dotenv()
 
 # Configure logging for Docker visibility
@@ -1404,6 +1407,11 @@ def get_top_scores(selected_row, interaction, num, tableType):
 @app.route('/send', methods=['POST'])
 def send_message():
     data = request.json
+
+    client_version = data.get('version')
+    if not client_version or client_version != version:
+        return jsonify({'status': 'Incorrect version of Module used. Version needed: ' + version}), 400
+
     api_key = data.get('api_key')
 
     # Check if the request contains an API key
@@ -1770,5 +1778,6 @@ def run_flask():
 threading.Thread(target=run_flask).start()
 
 logger.info("Starting Discord bot...")
+logger.info(f"Discord bot version: {version}")
 bot_token = os.getenv('DISCORD_BOT_TOKEN')
 client.run(bot_token)

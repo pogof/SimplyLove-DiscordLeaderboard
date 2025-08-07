@@ -1,3 +1,6 @@
+
+version = "1.3.0"
+
 local function debugPrint(message)
     Trace("[DiscordLeaderboard] "..message)
 end
@@ -630,7 +633,7 @@ local function SongResultData(player, apiKey, style, gameMode)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
+        '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s", "version": "%s"}',
         apiKey,
         songInfo.name,
         songInfo.artist,
@@ -649,7 +652,8 @@ local function SongResultData(player, apiKey, style, gameMode)
         style,
         songInfo.modifiers,
         encode(resultInfo.radar),
-        gameMode
+        gameMode,
+        version
         )  
 
     return jsonData
@@ -709,7 +713,7 @@ local function CourseResultData(player, apiKey, style, gameMode)
 
     -- Prepare JSON data
     local jsonData = string.format(
-        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": %s, "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s"}',
+        '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": %s, "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s", "version": "%s"}',
         apiKey,
         courseInfo.name,
         courseInfo.pack,
@@ -725,7 +729,8 @@ local function CourseResultData(player, apiKey, style, gameMode)
         style,
         courseInfo.modifiers,
         encode(resultInfo.radar),
-        gameMode
+        gameMode,
+        version
         )
 
     return jsonData
