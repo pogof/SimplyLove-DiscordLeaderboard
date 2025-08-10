@@ -781,7 +781,14 @@ u["ScreenEvaluationStage"] = Def.Actor {
                         end
                     end)
                 else
-                    SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Check player options. (Same rules as for GS apply)")
+                    -- Find which partValid failed
+                    local failed = {}
+                    for i, valid in ipairs(partValid) do
+                        if i ~= 1 and not valid then
+                            table.insert(failed, tostring(i))
+                        end
+                    end
+                    SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Failed checks: " .. table.concat(failed, ", ") .. ". Check player options. (Same rules as for GS apply)")
                 end
             else
                 SM("DiscordLeaderboard: Invalid data for player " .. ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
