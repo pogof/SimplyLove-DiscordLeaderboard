@@ -1,0 +1,45 @@
+name: Cleanup GHCR images
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      package_name:
+        type: string
+        default: simplylove-discordleaderboard
+        description: GHCR package name to clean up
+      retention_days:
+        type: number
+        default: 14
+        description: Delete unprotected tags older than this many days
+      dry_run:
+        type: boolean
+        default: false
+        description: Report deletions without deleting anything
+      delete_tag_regex:
+        type: string
+        default: "^dev-[0-9a-f]{7,40}$"
+        description: Only versions with at least one matching tag are eligible for deletion
+      keep_latest_matching_tag:
+        type: boolean
+        default: true
+        description: Keep the newest version matching delete_tag_regex
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    uses: pogof/actions/.github/workflows/ghcr-cleanup.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      package_name: simplylove-discordleaderboard
+      retention_days: 14
+      dry_run: false
+      delete_tag_regex: ^dev-[0-9a-f]{7,40}$
+      keep_latest_matching_tag: true
+    secrets: inherit
