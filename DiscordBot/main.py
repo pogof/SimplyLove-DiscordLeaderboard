@@ -1140,7 +1140,7 @@ def squash_db():
     row = c.fetchone()
     conn.close()
     
-    if not row or row[0] != "1.4.0":
+    if not row:
         from utility.squash_db_precision import backup_and_squash
 
         logger.info(f"Updating database version to {version}")
@@ -1149,11 +1149,14 @@ def squash_db():
 
         conn = sqlite3.connect(database)
         c = conn.cursor()
-        c.execute('INSERT OR REPLACE INTO CONFIG (version) VALUES (?)', (version,))
+        c.execute('DELETE FROM CONFIG')
+        c.execute('INSERT INTO CONFIG (version) VALUES (?)', (version,))
         conn.commit()
         conn.close()
-
 squash_db()
+
+
+
 
 #================================================================================================
 # Embedded score
