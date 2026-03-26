@@ -199,10 +199,10 @@ async def deletescore(Interaction: discord.Interaction, song: str, isdouble: boo
         for index, row in enumerate(results):
             if iscourse:
                 label = f"{row[1]} - {row[4]} [{row[5]}]"
-                description = f" EX Score: {row[8]}%, Pack: {row[2]}"
+                description = f" EX Score: {row[8]:.2f}%, Pack: {row[2]}"
             else:
                 label = f"{row[1]} - {row[2]} [{row[4]}]"
-                description = f" EX Score: {row[6]}%, Pack: {row[3]}"
+                description = f" EX Score: {row[6]:.2f}%, Pack: {row[3]}"
             options.append(discord.SelectOption(label=label, description=description, value=str(index)))
 
         class DeleteScoreSelect(discord.ui.Select):
@@ -449,7 +449,7 @@ async def score(interaction: discord.Interaction, song: str, isdouble: bool = Fa
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
-                description=f" EX Score: {row[6]}%, Pack: {row[3]}",
+                description=f" EX Score: {row[6]:.2f}%, Pack: {row[3]}",
                 value=str(index)
             )
             for index, row in enumerate(results)
@@ -562,7 +562,7 @@ async def course(interaction: discord.Interaction, name: str, isdouble: bool = F
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
-                description=f" EX Score: {row[6]}%, Pack: {row[3]}",
+                description=f" EX Score: {row[6]:.2f}%, Pack: {row[3]}",
                 value=str(index)
             )
             for index, row in enumerate(results)
@@ -982,7 +982,7 @@ async def breakdown(interaction: discord.Interaction, song: str, user: discord.U
         options = [
             discord.SelectOption(
                 label=f"{row[1]} - {row[2]} [{row[4]}]",
-                description=f" EX Score: {row[6]}%, Pack: {row[3]}",
+                description=f" EX Score: {row[6]:.2f}%, Pack: {row[3]}",
                 value=str(index)
             )
             for index, row in enumerate(results)
@@ -1203,7 +1203,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Difficulty", value= style + str(data.get('difficulty')), inline=True)
         # embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
         upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
-        embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
+        embed.add_field(name="EX Score", value=f"{float(data.get('exScore')):.2f}% (+ {upscore:.2f}%)", inline=True)
         embed.add_field(name="Grade", value=mapped_grade, inline=True)
         embed.add_field(name="Length", value=data.get('length'), inline=True)
         # embed.add_field(name="Stepartist", value=data.get('stepartist'), inline=True)
@@ -1233,7 +1233,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Difficulty", value= style + str(data.get('difficulty')), inline=True)
         embed.add_field(name="ITG Score", value=f"{data.get('itgScore')}%", inline=True)
         upscore = round(float(data.get('exScore')) - float(data.get('prevBestEx')), 2)
-        embed.add_field(name="EX Score", value=f"{data.get('exScore')}% (+ {upscore}%)", inline=True)
+        embed.add_field(name="EX Score", value=f"{float(data.get('exScore')):.2f}% (+ {upscore:.2f}%)", inline=True)
         embed.add_field(name="Grade", value=mapped_grade, inline=True)
         embed.add_field(name="Date played", value=data.get('date'), inline=True)
         embed.add_field(name="Mods", value=data.get('mods'), inline=True)
@@ -1260,7 +1260,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
         embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
         embed.add_field(name="Course Name", value=data.get('courseName'), inline=True)
         embed.add_field(name="Pack", value=data.get('pack'), inline=True)
-        embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
+        embed.add_field(name="EX Score", value=f"{float(data.get('exScore')):.2f}%", inline=True)
         embed.add_field(name="Date played", value=data.get('date'), inline=False)
         embed.add_field(name="Scripter", value=data.get('scripter'), inline=True)
         radar = data.get('radar')
@@ -1300,7 +1300,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
     embed.add_field(name="User", value=f"<@{user_id}>", inline=False)
     embed.add_field(name="Song", value=data.get('songName'), inline=True)
     embed.add_field(name="Pack", value=data.get('pack'), inline=True)
-    embed.add_field(name="EX Score", value=f"{data.get('exScore')}%", inline=True)
+    embed.add_field(name="EX Score", value=f"{float(data.get('exScore')):.2f}%", inline=True)
     embed.add_field(name="Date played", value=data.get('date'), inline=False)
 
     judgements = {
@@ -1427,7 +1427,7 @@ def get_top_scores(selected_row, interaction, num, tableType):
     # Format the top 3 scores
     top_scores_message = ""
     for idx, (uid, ex_score) in enumerate(top_scores, start=1):
-        top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
+        top_scores_message += f"{idx}. <@!{uid}>, EX Score: {float(ex_score):.2f}%\n"
 
     return top_scores_message
 
@@ -1711,7 +1711,7 @@ def send_message():
             # Format the top 3 scores
             top_scores_message = ""
             for idx, (uid, ex_score) in enumerate(top_selected_scores, start=1):
-                top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
+                top_scores_message += f"{idx}. <@!{uid}>, EX Score: {float(ex_score):.2f}%\n"
             
             embed.set_field_at(index=-1, name="Top Server Scores", value=top_scores_message, inline=False)
             channel_file = clone_discord_file(file)
