@@ -1128,6 +1128,34 @@ init_db()
 
 
 #================================================================================================
+# Cleanup tasks on startup
+# This stuff here is cleaning up shit from the previous version(s).
+#================================================================================================
+
+# Remove unnecessary precision from scatterplot and lifebar data
+def squash_db():
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+    c.execute('SELECT version FROM CONFIG')
+    row = c.fetchone()
+    conn.close()
+    
+    if not row or row[0] != "1.4.0":
+        from utility.squash_db_precision import backup_and_squash
+
+        logger.info(f"Updating database version to {version}")
+        logger.info(f"Squashing and compacting database. This might take a while...")
+        backup_and_squash(database, logger, decimal_places=3, compact=True)
+
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        c.execute('INSERT OR REPLACE INTO CONFIG (version) VALUES (?)', (version,))
+        conn.commit()
+        conn.close()
+
+squash_db()
+
+#================================================================================================
 # Embedded score
 #================================================================================================
 
