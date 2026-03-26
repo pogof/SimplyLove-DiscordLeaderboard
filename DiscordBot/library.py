@@ -61,6 +61,22 @@ def set_scale(worstWindow):
 
 
 #================================================================================================
+# Precision reduction utility
+#================================================================================================
+
+def reduce_precision(data, decimal_places=3):
+
+    if isinstance(data, list):
+        return [reduce_precision(item, decimal_places) for item in data]
+    elif isinstance(data, dict):
+        return {key: reduce_precision(value, decimal_places) for key, value in data.items()}
+    elif isinstance(data, float):
+        # Round to specified decimal places
+        return round(data, decimal_places)
+    else:
+        return data
+
+#================================================================================================
 # Data from database to dict
 #================================================================================================
 

@@ -429,6 +429,14 @@ end
 
 --------------------------------------------------------------------------------------------------
 
+local function roundToDecimalPlaces(value, decimalPlaces)
+    -- Round a number to the specified number of decimal places
+    local multiplier = 10 ^ decimalPlaces
+    return math.floor(value * multiplier + 0.5) / multiplier
+end
+
+--------------------------------------------------------------------------------------------------
+
 local function GetLifebarData(player, GraphWidth, GraphHeight)
     local steps = GAMESTATE:GetCurrentSteps(player)
     local timingData = steps:GetTimingData()
@@ -445,6 +453,9 @@ local function GetLifebarData(player, GraphWidth, GraphHeight)
     local stepSecond = chartStartSecond + (i - 1) * (duration / #lifeRecord)
     local xValue = ((stepSecond - firstSecond) / duration) * GraphWidth
     local yValue = lifebarValue * GraphHeight -- Scale y value to fit within GraphHeight
+    -- Reduce precision to 3 decimal places
+    xValue = roundToDecimalPlaces(xValue, 3)
+    yValue = roundToDecimalPlaces(yValue, 3)
     table.insert(lifebarData, {x = xValue, y = yValue})
     end
 
@@ -490,11 +501,12 @@ local function getScatterplotData(player, GraphWidth, GraphHeight)
         end
 
         local x = scale(CurrentSecond, FirstSecond, LastSecond + 0.05, 0, GraphWidth)
+        x = roundToDecimalPlaces(x, 3)
 
         if Offset ~= "Miss" then
             local TimingWindow = DetermineTimingWindow(Offset)
             local y = scale(Offset, worst_window, -worst_window, 0, GraphHeight)
-            
+            y = roundToDecimalPlaces(y, 3)
 
             local c = colors[TimingWindow]
 
@@ -505,9 +517,9 @@ local function getScatterplotData(player, GraphWidth, GraphHeight)
                 end
 
 
-            local r = c[1]
-            local g = c[2]
-            local b = c[3]
+            local r = roundToDecimalPlaces(c[1], 3)
+            local g = roundToDecimalPlaces(c[2], 3)
+            local b = roundToDecimalPlaces(c[3], 3)
 
             table.insert(scatterplotData, {x = x, y = y, color = {r, g, b, 0.666}})
         else

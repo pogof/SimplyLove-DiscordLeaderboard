@@ -1518,6 +1518,10 @@ def send_message():
     if data.get('gameMode') == 'pump':
         tableType += '_PUMP'
     
+    # Reduce precision of scatter plot and lifebar data to 3 decimal places before storing
+    data['scatterplotData'] = reduce_precision(data.get('scatterplotData'), 3)
+    data['lifebarInfo'] = reduce_precision(data.get('lifebarInfo'), 3)
+
     conn = sqlite3.connect(database)
     c = conn.cursor()
 
