@@ -1173,11 +1173,10 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
 
         # Create the scatter plot and save it as an image
         logging.info(f"Starting scatterplot creation for song: {data.get('songName')}")
-        create_scatterplot_from_json(data.get('scatterplotData'), data.get('lifebarInfo'), output_file='scatterplot.png')
+        file = build_plot_attachment(create_scatterplot_from_json, 'scatterplot.png', data.get('scatterplotData'), data.get('lifebarInfo'))
         logging.info(f"Completed scatterplot creation for song: {data.get('songName')}")
 
         # Send the embed with the image attachment
-        file = discord.File('scatterplot.png', filename='scatterplot.png')
         embed.set_image(url="attachment://scatterplot.png")
     
     else:
@@ -1200,8 +1199,7 @@ def embedded_score(data, user_id, title="Users Best Score", color=discord.Color.
         embed.add_field(name="Date played", value=data.get('date'), inline=True)
         embed.add_field(name="Mods", value=data.get('mods'), inline=True)
         
-        create_scatterplot_from_json(None, data.get('lifebarInfo'), output_file='scatterplot.png')
-        file = discord.File('scatterplot.png', filename='scatterplot.png')
+        file = build_plot_attachment(create_scatterplot_from_json, 'scatterplot.png', None, data.get('lifebarInfo'))
         embed.set_image(url="attachment://scatterplot.png")
 
     return embed, file
@@ -1246,8 +1244,7 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
         entries_str = entries_str.strip()  # Remove trailing newline
         embed.add_field(name="Song | Artist | Diff | Length", value=entries_str, inline=True)
 
-        create_scatterplot_from_json(None, data.get('lifebarInfo'), output_file='scatterplot.png')
-        file = discord.File('scatterplot.png', filename='scatterplot.png')
+        file = build_plot_attachment(create_scatterplot_from_json, 'scatterplot.png', None, data.get('lifebarInfo'))
         embed.set_image(url="attachment://scatterplot.png")
         return embed, file
 
@@ -1363,10 +1360,9 @@ def embedded_breakdown(data, user_id, title="Score Breakdown", color=discord.Col
     embed.add_field(name="Mods", value=data.get('mods'), inline=True)
 
     logging.info(f"Starting distribution plot creation for song: {data.get('songName')}")
-    create_distribution_from_json(data.get('scatterplotData'), data.get('worstWindow'), output_file='distribution.png')
+    file = build_plot_attachment(create_distribution_from_json, 'distribution.png', data.get('scatterplotData'), data.get('worstWindow'))
     logging.info(f"Completed distribution plot creation for song: {data.get('songName')}")
     # Send the embed with the image attachment
-    file = discord.File('distribution.png', filename='distribution.png')
     embed.set_image(url="attachment://distribution.png")
 
     return embed, file
@@ -1675,10 +1671,10 @@ def send_message():
                 top_scores_message += f"{idx}. <@!{uid}>, EX Score: {ex_score}%\n"
             
             embed.set_field_at(index=-1, name="Top Server Scores", value=top_scores_message, inline=False)
+            channel_file = clone_discord_file(file)
             
             asyncio.run_coroutine_threadsafe(
-                channel.send(embed=embed, file=discord.File('scatterplot.png', filename='scatterplot.png'), allowed_mentions=discord.AllowedMentions.none()),
-                client.loop
+                channel.send(embed=embed, file=channel_file, allowed_mentions=discord.AllowedMentions.none()), client.loop
             )
 
     conn.close()

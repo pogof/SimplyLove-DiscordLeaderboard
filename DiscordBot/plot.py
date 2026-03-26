@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from library import *
-
+import io
+import discord
 
 #================================================================================================
 # Graph generation
@@ -138,3 +139,14 @@ def create_distribution_from_json(data, worstWindow,  output_file='distribution.
     plt.gcf().patch.set_facecolor('black')
     plt.savefig(output_file, bbox_inches='tight', pad_inches=0)
     plt.close()
+
+def build_plot_attachment(plotter, attachment_name, *plot_args):
+    buffer = io.BytesIO()
+    plotter(*plot_args, output_file=buffer)
+    buffer.seek(0)
+    return discord.File(buffer, filename=attachment_name)
+
+
+def clone_discord_file(file_obj):
+    file_obj.fp.seek(0)
+    return discord.File(io.BytesIO(file_obj.fp.read()), filename=file_obj.filename)
