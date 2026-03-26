@@ -1155,8 +1155,16 @@ def squash_db():
         conn.close()
 squash_db()
 
-
-
+# Set version in the database to match the current version of the bot. 
+# This is used to determine if future updates need to run any cleanup 
+# tasks and what order to apply them in.
+conn = sqlite3.connect(database)
+c = conn.cursor()
+c.execute('DELETE FROM CONFIG')
+c.execute('INSERT INTO CONFIG (version) VALUES (?)', (version,))
+conn.commit()
+conn.close()
+logger.info(f"Database has been updated to version {version}")
 
 #================================================================================================
 # Embedded score
