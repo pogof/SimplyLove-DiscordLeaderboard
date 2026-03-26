@@ -16,8 +16,8 @@ jobs:
     with:
       registry: ghcr.io
       image_name: simplylove-discordleaderboard
-      dockerfile: ./DiscordBot/Dockerfile
-      context: ./DiscordBot
+      dockerfile: ./Dockerfile
+      context: .
 
   update-dev-deploy:
     if: github.ref == 'refs/heads/dev'
@@ -43,8 +43,8 @@ jobs:
     with:
       registry: ghcr.io
       image_name: simplylove-discordleaderboard
-      dockerfile: ./DiscordBot/Dockerfile
-      context: ./DiscordBot
+      dockerfile: ./Dockerfile
+      context: .
       tag_name: ${{ github.event.release.tag_name }}
       push_latest: true
 
@@ -68,8 +68,8 @@ jobs:
       - name: Build and push Docker image (release)
         uses: docker/build-push-action@v5
         with:
-          context: ./DiscordBot
-          file: ./DiscordBot/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/simplylove-discordleaderboard:${{ github.event.release.tag_name }}
