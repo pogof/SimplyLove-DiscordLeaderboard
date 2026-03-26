@@ -1,5 +1,16 @@
-
-version = "1.3.0"
+--------------------------------------------------------------------------------------------------
+-- ResultScraper.lua
+-- Author: PogofCZ
+-- Original repo: https/github.com/Pogof/SimplyLove-DiscordLeaderboard
+--
+-- This module gathers all relevant data at the end of a song/course and sends it to the configured backend.
+-- The original backend is intended to be a Discord leaderboard bot, but anyone is free to setup their own
+-- server to receive the data and do with it as they please.
+--
+-- The module version corresponds to the original backend version.
+-- DO NOT CHANGE THIS NUMBER  
+version = "1.4.0"
+---------------------------------------------------------------------------------------------------
 
 local function debugPrint(message)
     Trace("[DiscordLeaderboard] "..message)
