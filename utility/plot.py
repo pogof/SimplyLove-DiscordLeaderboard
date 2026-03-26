@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from library import *
+from utility.library import *
 import io
 import discord
 
