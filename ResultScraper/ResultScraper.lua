@@ -13,6 +13,8 @@ local version = nil
 local botURL = nil
 --------------------------------------------------------------------------------------------------
 
+-- luacheck: globals GAMESTATE PREFSMAN THEME SL PLAYER_1 PLAYER_2 STATSMAN CRYPTMAN PROFILEMAN IniFile NETWORK IsHumanPlayer FormatPercentScore CalculateExScore GetTimingWindow GetWorstJudgment BinaryToHex clamp Trace ToEnumShortString ivalues MESSAGEMAN
+
 -- Normalize botURL to base URL
 local function normalizeBotURL(url)
     if not url then return nil end
@@ -142,6 +144,24 @@ local function validatePumpWindows(player)
 
     return valid
 end
+
+--------------------------------------------------------------------------------------------------
+
+local invalidMapping = {
+    [1] = "Wrong Game (Only DANCE or PUMP is supported)",
+    [2] = "Solo (6panel) is not supported",
+    [3] = "Course mode (You shouldn't be getting this,\ncheck for other errors first)",
+    [4] = "Not in ITG/FA+ mode (No casuals allowed!)",
+    [5] = "Timing window set too lose. Must be 4 or higher.",
+    [6] = "Life difficulty set too low. Must be 4 or higher.",
+    [7] = "Something in Preferences.ini is set wrong. Reset the file.",
+    [8] = "Music Rate must be between 1x and 3x.",
+    [9] = "Notes were removed (Little, NoHolds, NoMines,...)",
+    [10] = "Notes were added (Wide, Echo, Quick,...)",
+    [11] = "Fail type not Immediate or ImmediateContinue.",
+    [12] = "Autoplay is enabled.",
+    [13] = "Rescoring or other errors"
+}
 
 --------------------------------------------------------------------------------------------------
 
@@ -759,8 +779,17 @@ end
 
 local u = {}
 
-u["ScreenEvaluationStage"] = Def.Actor {
+u["ScreenEvaluationStage"] = Def.ActorFrame {
     ModuleCommand = function(self)
+        local p1Text = self:GetChild("ACSubmitP1")
+        local p2Text = self:GetChild("ACSubmitP2")
+        local p1ErrMsg = self:GetChild("ACErrorP1")
+        local p2ErrMsg = self:GetChild("ACErrorP2")
+        if p1Text then p1Text:settext("") end
+        if p2Text then p2Text:settext("") end
+        if p1ErrMsg then p1ErrMsg:settext("") end
+        if p2ErrMsg then p2ErrMsg:settext("") end
+
         -- "dance" or "pump"
         local gameMode = GAMESTATE:GetCurrentGame():GetName()
         -- single, versus, double
@@ -769,6 +798,10 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
         for player in ivalues(GAMESTATE:GetHumanPlayers()) do
             local partValid, allValid = ValidForGrooveStats(player)
+
+            local pn = ToEnumShortString(player)
+            local label = (pn == "P1") and p1Text or p2Text
+            local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
             if gameMode == "pump" then
                 partValid[7] = validatePumpWindows(player)
@@ -786,42 +819,79 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
             if botURL ~= nil and APIKey ~= nil then
                 if allValid then
+                    label:settext("DiscordLeaderboard: Submitting…")
                     local data = SongResultData(player, APIKey, style, gameMode)
 
                     -- Use chunked sending for potentially large data
                     sendDataInChunks(data, botURL, function(code, body)
                         if code == 200 then
-                            SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " Score successfully submitted.")
+                            label:settext("✔ DiscordLeaderboard: Submitted!")
                         else
-                            SM("DiscordLeaderboard: " ..
-                                ToEnumShortString(player) ..
-                                ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                            label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                            errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                         end
                     end)
                 else
-                    -- Find which partValid failed
                     local failed = {}
                     for i, valid in ipairs(partValid) do
                         if i ~= 1 and not valid then
-                            table.insert(failed, tostring(i))
+                            table.insert(failed,
+                                invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
                         end
                     end
-                    SM("DiscordLeaderboard: " ..
-                        ToEnumShortString(player) ..
-                        " invalid score. Failed checks: " ..
-                        table.concat(failed, ", ") .. ". Check player options. (Same rules as for GS apply)")
+                    label:settext("❌ DiscordLeaderboard: Invalid Score.")
+                    errLabel:settext(table.concat(failed, "\n"))
                 end
             else
-                SM("DiscordLeaderboard: Invalid data for player " ..
-                    ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
+                label:settext("❌ DiscordLeaderboard: Invalid Data.")
+                errLabel:settext("Your INI file is invalid.")
             end
         end
-    end
+    end,
+    LoadFont("Common Normal") .. {
+        Name = "ACSubmitP1",
+        InitCommand = function(self)
+            self:xy(10, 50):zoom(0.6):halign(0):valign(0)
+            self:settext("")
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACSubmitP2",
+        InitCommand = function(self)
+            self:xy(_screen.w - 10, 50):zoom(0.6):halign(1):valign(0)
+            self:settext("")
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACErrorP1",
+        InitCommand = function(self)
+            self:xy(10, 64):zoom(0.5):halign(0):valign(0)
+            self:settext("")
+            self:diffusecolor({ 1, 1, 1, 1 })
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACErrorP2",
+        InitCommand = function(self)
+            self:xy(_screen.w - 10, 64):zoom(0.5):halign(1):valign(0)
+            self:settext("")
+            self:diffusecolor({ 1, 1, 1, 1 })
+        end
+    },
 }
 
 
 u["ScreenEvaluationNonstop"] = Def.ActorFrame {
     ModuleCommand = function(self)
+        local p1Text = self:GetChild("ACSubmitP1")
+        local p2Text = self:GetChild("ACSubmitP2")
+        local p1ErrMsg = self:GetChild("ACErrorP1")
+        local p2ErrMsg = self:GetChild("ACErrorP2")
+        if p1Text then p1Text:settext("") end
+        if p2Text then p2Text:settext("") end
+        if p1ErrMsg then p1ErrMsg:settext("") end
+        if p2ErrMsg then p2ErrMsg:settext("") end
+
         local fixed = GAMESTATE:GetCurrentCourse():AllSongsAreFixed()
         local autogen = GAMESTATE:GetCurrentCourse():IsAutogen()
         local endless = GAMESTATE:GetCurrentCourse():IsEndless()
@@ -837,6 +907,10 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
             for player in ivalues(GAMESTATE:GetHumanPlayers()) do
                 -- Doesn't return true for courses, but I can use everything else lol
                 local partValid, allValid = ValidForGrooveStats(player)
+
+                local pn = ToEnumShortString(player)
+                local label = (pn == "P1") and p1Text or p2Text
+                local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
                 if gameMode == "pump" then
                     partValid[7] = validatePumpWindows(player)
@@ -867,30 +941,66 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                         -- Use chunked sending for potentially large data
                         sendDataInChunks(data, botURL, function(code, body)
                             if code == 200 then
-                                SM("DiscordLeaderboard: " ..
-                                    ToEnumShortString(player) .. " Score successfully submitted.")
+                                label:settext("✔ DiscordLeaderboard: Submitted!")
                             else
-                                SM("DiscordLeaderboard: " ..
-                                    ToEnumShortString(player) ..
-                                    ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                                label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                                errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                             end
                         end)
                     else
-                        SM("DiscordLeaderboard: " ..
-                            ToEnumShortString(player) ..
-                            " invalid score. Check player options. (Same rules as for GS apply)")
+                        local failed = {}
+                        for i, valid in ipairs(partValid) do
+                            if i ~= 1 and not valid then
+                                if i ~= 3 then
+                                    table.insert(failed,
+                                        invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
+                                end
+                            end
+                        end
+                        label:settext("❌ DiscordLeaderboard: Invalid Score.")
+                        errLabel:settext(table.concat(failed, "\n"))
                     end
                 else
-                    SM("DiscordLeaderboard: Invalid data for player " ..
-                        ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
+                    label:settext("❌ DiscordLeaderboard: Invalid Data.")
+                    errLabel:settext("Error: Invalid data. Bot URL or API key is missing or invalid.")
                 end
             end
         end
-    end
+    end,
+    LoadFont("Common Normal") .. {
+        Name = "ACSubmitP1",
+        InitCommand = function(self)
+            self:xy(10, 50):zoom(0.6):halign(0):valign(0)
+            self:settext("")
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACSubmitP2",
+        InitCommand = function(self)
+            self:xy(_screen.w - 10, 50):zoom(0.6):halign(1):valign(0)
+            self:settext("")
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACErrorP1",
+        InitCommand = function(self)
+            self:xy(10, 64):zoom(0.5):halign(0):valign(0)
+            self:settext("")
+            self:diffusecolor({ 1, 1, 1, 1 })
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "ACErrorP2",
+        InitCommand = function(self)
+            self:xy(_screen.w - 10, 64):zoom(0.5):halign(1):valign(0)
+            self:settext("")
+            self:diffusecolor({ 1, 1, 1, 1 })
+        end
+    },
 }
 
 -- This has been borrowed from ArrowCloud Blue Shift Module
--- That has been based on this module actually lol
+-- that has been based on this module actually lol
 -- https://arrowcloud.dance/
 u["ScreenTitleMenu"] = Def.ActorFrame {
     InitCommand = function(self)
