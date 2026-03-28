@@ -681,6 +681,10 @@ def receive_chunk():
     
     return jsonify({'status': f'Chunk {chunk_index}/{total_chunks} received successfully. ({received_count}/{total_count} {chunk_type} chunks received)'}), 200
 
+@app.route('/hello', methods=['GET'])
+def hello():
+    return jsonify({'status': f'{version}'}), 200
+
 #================================================================================================
 # Run Flask, run Discord bot
 #================================================================================================

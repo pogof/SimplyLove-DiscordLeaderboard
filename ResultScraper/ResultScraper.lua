@@ -8,7 +8,7 @@
 -- server to receive the data and do with it as they please.
 --
 -- The module version corresponds to the original backend version.
--- DO NOT CHANGE THESE UNLESS YOU ARE THE SERVER ADMINISTRATOR. It will stop sending the results to the server.  
+-- DO NOT CHANGE THESE UNLESS YOU ARE THE SERVER ADMINISTRATOR. It will stop sending the results to the server.
 local version = nil
 local botURL = nil
 --------------------------------------------------------------------------------------------------
@@ -24,10 +24,29 @@ local function normalizeBotURL(url)
     return url:match("^(https?://[^/]+)") or url
 end
 
+local function normalizeBotHost(url)
+    local normalized = normalizeBotURL(url)
+    if not normalized then return nil end
+    local host = normalized:gsub("^https?://", "")
+    host = host:match("^[^/]+") or host
+    host = host:match("^([^:]+)") or host
+
+    local parts = {}
+    for part in host:gmatch("[^.]+") do
+        table.insert(parts, part)
+    end
+
+    if #parts >= 2 then
+        return "*." .. parts[#parts - 1] .. "." .. parts[#parts]
+    end
+
+    return host
+end
+
 --------------------------------------------------------------------------------------------------
 
 local function debugPrint(message)
-    Trace("[DiscordLeaderboard] "..message)
+    Trace("[DiscordLeaderboard] " .. message)
 end
 
 --------------------------------------------------------------------------------------------------
@@ -49,83 +68,84 @@ end
 --------------------------------------------------------------------------------------------------
 
 -- This section was stolen from SL-Helper-GrooveStats.lua
--- Values edited to work for pump mode 
+-- Values edited to work for pump mode
 
 local function validatePumpWindows(player)
+    local pn = ToEnumShortString(player)
 
-	local pn = ToEnumShortString(player)	
-	
-	-- Validate all other metrics.
-	local ExpectedTWA = 0.0015
-	local ExpectedWindows = {
-		0.021500 + ExpectedTWA,  -- Fantastics
-		0.043000 + ExpectedTWA,  -- Excellents
-		0.102000 + ExpectedTWA,  -- Greats
-		0.135000 + ExpectedTWA,  -- Decents
-		0.180000 + ExpectedTWA,  -- Way Offs
-		0.320000 + ExpectedTWA,  -- Holds
-		0.070000 + ExpectedTWA,  -- Mines
-		0.350000 + ExpectedTWA,  -- Rolls
-	}
-	local TimingWindows = { "W1", "W2", "W3", "W4", "W5", "Hold", "Mine", "Roll" }
-	local ExpectedLife = {
-		 0.008,  -- Fantastics
-		 0.008,  -- Excellents
-		 0.004,  -- Greats
-		 0.000,  -- Decents
-		-0.050,  -- Way Offs
-		-0.100,  -- Miss
-		 0.000,  -- Let Go
-		 0.000,  -- Held
-		-0.050,  -- Hit Mine
-	}
-	local ExpectedScoreWeight = {
-		 5,  -- Fantastics
-		 4,  -- Excellents
-		 2,  -- Greats
-		 0,  -- Decents
-		-6,  -- Way Offs
-		-12,  -- Miss
-		 0,  -- Let Go
-		 0,  -- Held
-		-6,  -- Hit Mine
-	}
-	local LifeWindows = { "W1", "W2", "W3", "W4", "W5", "Miss", "LetGo", "Held", "HitMine" }
+    -- Validate all other metrics.
+    local ExpectedTWA = 0.0015
+    local ExpectedWindows = {
+        0.021500 + ExpectedTWA, -- Fantastics
+        0.043000 + ExpectedTWA, -- Excellents
+        0.102000 + ExpectedTWA, -- Greats
+        0.135000 + ExpectedTWA, -- Decents
+        0.180000 + ExpectedTWA, -- Way Offs
+        0.320000 + ExpectedTWA, -- Holds
+        0.070000 + ExpectedTWA, -- Mines
+        0.350000 + ExpectedTWA, -- Rolls
+    }
+    local TimingWindows = { "W1", "W2", "W3", "W4", "W5", "Hold", "Mine", "Roll" }
+    local ExpectedLife = {
+        0.008,  -- Fantastics
+        0.008,  -- Excellents
+        0.004,  -- Greats
+        0.000,  -- Decents
+        -0.050, -- Way Offs
+        -0.100, -- Miss
+        0.000,  -- Let Go
+        0.000,  -- Held
+        -0.050, -- Hit Mine
+    }
+    local ExpectedScoreWeight = {
+        5,   -- Fantastics
+        4,   -- Excellents
+        2,   -- Greats
+        0,   -- Decents
+        -6,  -- Way Offs
+        -12, -- Miss
+        0,   -- Let Go
+        0,   -- Held
+        -6,  -- Hit Mine
+    }
+    local LifeWindows = { "W1", "W2", "W3", "W4", "W5", "Miss", "LetGo", "Held", "HitMine" }
 
-	-- Originally verify the ComboToRegainLife metrics.
-	local valid = (PREFSMAN:GetPreference("RegenComboAfterMiss") == 5 and PREFSMAN:GetPreference("MaxRegenComboAfterMiss") == 10)
+    -- Originally verify the ComboToRegainLife metrics.
+    local valid = (PREFSMAN:GetPreference("RegenComboAfterMiss") == 5 and PREFSMAN:GetPreference("MaxRegenComboAfterMiss") == 10)
 
-	local FloatEquals = function(a, b)
-		return math.abs(a-b) < 0.0001
-	end
+    local FloatEquals = function(a, b)
+        return math.abs(a - b) < 0.0001
+    end
 
-	valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "InitialValue"), 0.5)
-	valid = valid and PREFSMAN:GetPreference("HarshHotLifePenalty")
+    valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "InitialValue"), 0.5)
+    valid = valid and PREFSMAN:GetPreference("HarshHotLifePenalty")
 
-	-- And then verify the windows themselves.
-	local TWA = PREFSMAN:GetPreference("TimingWindowAdd")
-	if SL.Global.GameMode == "ITG" then
-		for i, window in ipairs(TimingWindows) do
-			-- Only check if the Timing Window is actually "enabled".
-			if i > 5 or SL[pn].ActiveModifiers.TimingWindows[i] then
-				valid = valid and FloatEquals(PREFSMAN:GetPreference("TimingWindowSeconds"..window) + TWA, ExpectedWindows[i])
-			end
-		end
+    -- And then verify the windows themselves.
+    local TWA = PREFSMAN:GetPreference("TimingWindowAdd")
+    if SL.Global.GameMode == "ITG" then
+        for i, window in ipairs(TimingWindows) do
+            -- Only check if the Timing Window is actually "enabled".
+            if i > 5 or SL[pn].ActiveModifiers.TimingWindows[i] then
+                valid = valid and
+                    FloatEquals(PREFSMAN:GetPreference("TimingWindowSeconds" .. window) + TWA, ExpectedWindows[i])
+            end
+        end
 
-		for i, window in ipairs(LifeWindows) do
-			valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "LifePercentChange"..window), ExpectedLife[i])
+        for i, window in ipairs(LifeWindows) do
+            valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "LifePercentChange" .. window), ExpectedLife
+                [i])
 
-			valid = valid and THEME:GetMetric("ScoreKeeperNormal", "PercentScoreWeight"..window) == ExpectedScoreWeight[i]
-		end
-	end
-	
-	return valid
+            valid = valid and
+                THEME:GetMetric("ScoreKeeperNormal", "PercentScoreWeight" .. window) == ExpectedScoreWeight[i]
+        end
+    end
+
+    return valid
 end
 
 --------------------------------------------------------------------------------------------------
 
 local function readURLandKey(player)
-
     local playerIndex = (player == PLAYER_1) and 0 or 1
     local profilePath = PROFILEMAN:GetProfileDir(playerIndex)
 
@@ -134,8 +154,8 @@ local function readURLandKey(player)
         return nil, nil
     end
 
-  
-    local filePath = profilePath.."DiscordLeaderboard.ini"
+
+    local filePath = profilePath .. "DiscordLeaderboard.ini"
 
     local APIKey
 
@@ -146,10 +166,9 @@ local function readURLandKey(player)
             return normalizeBotURL(botURL), APIKey
         end
     else
-        debugPrint("DiscordLeaderboard.ini not found or has an incorrect format.") 
+        debugPrint("DiscordLeaderboard.ini not found or has an incorrect format.")
         return nil, nil
     end
-
 end
 
 --------------------------------------------------------------------------------------------------
@@ -220,13 +239,13 @@ local function sendData(data, botURL, callback)
     -- Check data size before sending
     local dataSize = string.len(data)
     debugPrint("Sending data of size: " .. dataSize .. " bytes to " .. botURL)
-    
+
     if dataSize > 1048576 then -- 1MB limit
-        debugPrint("Warning: Data size is very large (" .. math.floor(dataSize/1024) .. "KB), this might cause issues")
+        debugPrint("Warning: Data size is very large (" .. math.floor(dataSize / 1024) .. "KB), this might cause issues")
     end
 
     -- Send HTTP POST request
-    NETWORK:HttpRequest{
+    NETWORK:HttpRequest {
         url = botURL,
         method = "POST",
         body = data,
@@ -236,16 +255,16 @@ local function sendData(data, botURL, callback)
         onResponse = function(response)
             local code = response.statusCode or 0
             local response_body = response.body or ""
-            
+
             debugPrint("HTTP Response - Code: " .. tostring(code) .. ", Body length: " .. string.len(response_body))
-            
+
             if code == 0 or response_body == "" then
                 if callback then
                     callback(code, "Network error or timeout - no response received")
                 end
                 return
             end
-            
+
             local decoded = JsonDecode(response_body)
             local body = decoded and decoded.status or response_body
             if callback then
@@ -261,25 +280,25 @@ end
 local function sendDataInChunks(data, botURL, callback)
     local dataSize = string.len(data)
     debugPrint("Total data size: " .. dataSize .. " bytes")
-    
+
     -- If data is small enough, send normally
     if dataSize < 500000 then -- 500KB limit
         debugPrint("Data size is manageable, sending normally")
         return sendData(data, botURL .. "/send", callback)
     end
-    
+
     debugPrint("Data is large, attempting to send in chunks")
-    
+
     -- Parse the JSON to extract large arrays
     local decoded = JsonDecode(data)
     if not decoded then
         debugPrint("Failed to parse data for chunking, sending normally")
         return sendData(data, botURL .. "/send", callback)
     end
-    
+
     local scatterplotData = decoded.scatterplotData
     local lifebarInfo = decoded.lifebarInfo
-    
+
     -- Check if we have large arrays to chunk
     local needsChunking = false
     if scatterplotData and #scatterplotData > 1000 then
@@ -287,66 +306,68 @@ local function sendDataInChunks(data, botURL, callback)
     elseif lifebarInfo and #lifebarInfo > 500 then
         needsChunking = true
     end
-    
+
     if not needsChunking then
         debugPrint("No large arrays found, sending normally")
         return sendData(data, botURL .. "/send", callback)
     end
-    
+
     -- Remove large arrays from main payload
     decoded.scatterplotData = nil
     decoded.lifebarInfo = nil
     decoded.isChunked = true
-    
+
     -- Calculate number of chunks needed
     local chunkSize = 1000 -- points per chunk
     local scatterChunks = 0
     local lifebarChunks = 0
-    
+
     if scatterplotData then
         scatterChunks = math.ceil(#scatterplotData / chunkSize)
     end
     if lifebarInfo then
         lifebarChunks = math.ceil(#lifebarInfo / chunkSize)
     end
-    
+
     decoded.totalChunks = scatterChunks + lifebarChunks + 1 -- +1 for main data
     decoded.scatterplotChunks = scatterChunks
     decoded.lifebarChunks = lifebarChunks
-    
+
     local mainData = encode(decoded)
-    
+
     -- botURL is already normalized to base URL
     local sendURL = botURL .. "/send"
     local chunkURL = botURL .. "/chunk"
-    
+
     debugPrint("Using URLs - Chunks: " .. chunkURL .. ", Main data: " .. sendURL)
-    debugPrint("Sending " .. scatterChunks .. " scatterplot chunks and " .. lifebarChunks .. " lifebar chunks first, then main data")
-    
+    debugPrint("Sending " ..
+        scatterChunks .. " scatterplot chunks and " .. lifebarChunks .. " lifebar chunks first, then main data")
+
     local chunksToSend = scatterChunks + lifebarChunks
     local chunksCompleted = 0
     local hasError = false
-    
+
     local function checkAllChunksSent()
         chunksCompleted = chunksCompleted + 1
         debugPrint("Chunk completed: " .. chunksCompleted .. "/" .. chunksToSend)
-        
+
         if chunksCompleted >= chunksToSend and not hasError then
             debugPrint("All chunks sent successfully, now sending main data")
             sendData(mainData, sendURL, callback)
         end
     end
-    
+
     local function handleChunkError(code, body, chunkType, chunkIndex)
         if not hasError then
             hasError = true
-            debugPrint("Failed to send " .. chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(code) .. " - " .. tostring(body))
-            if callback then 
-                callback(code, "Failed to send " .. chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(body)) 
+            debugPrint("Failed to send " ..
+                chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(code) .. " - " .. tostring(body))
+            if callback then
+                callback(code, "Failed to send " .. chunkType .. " chunk " .. chunkIndex .. ": " .. tostring(body))
             end
         end
     end
-    
+
     -- Send scatterplot chunks first
     if scatterplotData then
         for i = 1, scatterChunks do
@@ -356,7 +377,7 @@ local function sendDataInChunks(data, botURL, callback)
             for j = startIdx, endIdx do
                 table.insert(chunk, scatterplotData[j])
             end
-            
+
             local chunkData = encode({
                 hash = decoded.hash,
                 api_key = decoded.api_key,
@@ -365,7 +386,7 @@ local function sendDataInChunks(data, botURL, callback)
                 totalChunks = scatterChunks,
                 data = chunk
             })
-            
+
             debugPrint("Sending scatterplot chunk " .. i .. "/" .. scatterChunks .. " (" .. #chunk .. " points)")
             sendData(chunkData, chunkURL, function(code, body)
                 if code == 200 then
@@ -376,7 +397,7 @@ local function sendDataInChunks(data, botURL, callback)
             end)
         end
     end
-    
+
     -- Send lifebar chunks
     if lifebarInfo then
         for i = 1, lifebarChunks do
@@ -386,7 +407,7 @@ local function sendDataInChunks(data, botURL, callback)
             for j = startIdx, endIdx do
                 table.insert(chunk, lifebarInfo[j])
             end
-            
+
             local chunkData = encode({
                 hash = decoded.hash,
                 api_key = decoded.api_key,
@@ -395,7 +416,7 @@ local function sendDataInChunks(data, botURL, callback)
                 totalChunks = lifebarChunks,
                 data = chunk
             })
-            
+
             debugPrint("Sending lifebar chunk " .. i .. "/" .. lifebarChunks .. " (" .. #chunk .. " points)")
             sendData(chunkData, chunkURL, function(code, body)
                 if code == 200 then
@@ -406,7 +427,7 @@ local function sendDataInChunks(data, botURL, callback)
             end)
         end
     end
-    
+
     -- If no chunks to send, send main data immediately
     if chunksToSend == 0 then
         debugPrint("No chunks to send, sending main data immediately")
@@ -437,13 +458,13 @@ local function GetLifebarData(player, GraphWidth, GraphHeight)
     local lifeRecord = playerStageStats:GetLifeRecord(lastSecond, 100) -- Use lastSecond and default samples
 
     for i, lifebarValue in ipairs(lifeRecord) do
-    local stepSecond = chartStartSecond + (i - 1) * (duration / #lifeRecord)
-    local xValue = ((stepSecond - firstSecond) / duration) * GraphWidth
-    local yValue = lifebarValue * GraphHeight -- Scale y value to fit within GraphHeight
-    -- Reduce precision to 3 decimal places
-    xValue = roundToDecimalPlaces(xValue, 3)
-    yValue = roundToDecimalPlaces(yValue, 3)
-    table.insert(lifebarData, {x = xValue, y = yValue})
+        local stepSecond = chartStartSecond + (i - 1) * (duration / #lifeRecord)
+        local xValue = ((stepSecond - firstSecond) / duration) * GraphWidth
+        local yValue = lifebarValue * GraphHeight -- Scale y value to fit within GraphHeight
+        -- Reduce precision to 3 decimal places
+        xValue = roundToDecimalPlaces(xValue, 3)
+        yValue = roundToDecimalPlaces(yValue, 3)
+        table.insert(lifebarData, { x = xValue, y = yValue })
     end
 
     return lifebarData
@@ -452,7 +473,6 @@ end
 --------------------------------------------------------------------------------------------------
 
 local function getScatterplotData(player, GraphWidth, GraphHeight)
-
     local pn = ToEnumShortString(player)
     local mods = SL[pn].ActiveModifiers
 
@@ -498,22 +518,22 @@ local function getScatterplotData(player, GraphWidth, GraphHeight)
             local c = colors[TimingWindow]
 
 
-                local abs_offset = math.abs(Offset)
-                if abs_offset > GetTimingWindow(1, "FA+") and abs_offset <= GetTimingWindow(2, "FA+") then
-                    c = SL.JudgmentColors["FA+"][2]
-                end
+            local abs_offset = math.abs(Offset)
+            if abs_offset > GetTimingWindow(1, "FA+") and abs_offset <= GetTimingWindow(2, "FA+") then
+                c = SL.JudgmentColors["FA+"][2]
+            end
 
 
             local r = roundToDecimalPlaces(c[1], 3)
             local g = roundToDecimalPlaces(c[2], 3)
             local b = roundToDecimalPlaces(c[3], 3)
 
-            table.insert(scatterplotData, {x = x, y = y, color = {r, g, b, 0.666}})
+            table.insert(scatterplotData, { x = x, y = y, color = { r, g, b, 0.666 } })
         else
-            table.insert(scatterplotData, {x = x, y = 0, color = {1, 0, 0, 0.466}})
-            table.insert(scatterplotData, {x = x + 1, y = 0, color = {1, 0, 0, 0.466}})
-            table.insert(scatterplotData, {x = x + 1, y = GraphHeight, color = {1, 0, 0, 0.466}})
-            table.insert(scatterplotData, {x = x, y = GraphHeight, color = {1, 0, 0, 0.466}})
+            table.insert(scatterplotData, { x = x, y = 0, color = { 1, 0, 0, 0.466 } })
+            table.insert(scatterplotData, { x = x + 1, y = 0, color = { 1, 0, 0, 0.466 } })
+            table.insert(scatterplotData, { x = x + 1, y = GraphHeight, color = { 1, 0, 0, 0.466 } })
+            table.insert(scatterplotData, { x = x, y = GraphHeight, color = { 1, 0, 0, 0.466 } })
         end
     end
 
@@ -526,16 +546,15 @@ end
 -- Hands I guess are a separate thing, but might as well include them lol
 -- Not interested in other Tech notation (at least for now lol)
 local function getRadar(player)
-
     local pss = STATSMAN:GetCurStageStats():GetPlayerStageStats(player)
     local RadarCategories = { 'Hands', 'Holds', 'Mines', 'Rolls' }
-    
+
     local radarValues = {}
 
     for i, RCType in ipairs(RadarCategories) do
         radarValues[RCType] = {}
-        radarValues[RCType][1] = pss:GetRadarActual():GetValue( "RadarCategory_"..RCType )
-        radarValues[RCType][2] = pss:GetRadarPossible():GetValue( "RadarCategory_"..RCType )
+        radarValues[RCType][1] = pss:GetRadarActual():GetValue("RadarCategory_" .. RCType)
+        radarValues[RCType][2] = pss:GetRadarPossible():GetValue("RadarCategory_" .. RCType)
         radarValues[RCType][2] = clamp(radarValues[RCType][2], 0, 999)
     end
 
@@ -546,10 +565,10 @@ end
 
 local function comment(player)
     local pn = ToEnumShortString(player)
-    
+
     local comment = ""
-	
-	local cmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):CMod()
+
+    local cmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):CMod()
     local mmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):MMod()
     local xmod = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):XMod()
     if xmod ~= nil then
@@ -557,31 +576,32 @@ local function comment(player)
     end
 
     if cmod ~= nil then
-		comment = comment.."C"..tostring(cmod)
+        comment = comment .. "C" .. tostring(cmod)
     elseif mmod ~= nil then
-        comment = comment.."M"..tostring(mmod)
+        comment = comment .. "M" .. tostring(mmod)
     elseif xmod ~= nil then
-        comment = comment.."X"..tostring(xmod)
+        comment = comment .. "X" .. tostring(xmod)
     end
 
     local mini = GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):Mini()
-    if mini ~= nil then comment = comment..", ".. math.floor(100 * mini + 0.5) .. "% Mini" end
-    
-    local visualDelay = math.floor(1000 * GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay() + 0.5)
-    if visualDelay ~= nil and visualDelay ~= 0 then comment = comment..", "..visualDelay.."ms (Vis.Del)" end
+    if mini ~= nil then comment = comment .. ", " .. math.floor(100 * mini + 0.5) .. "% Mini" end
+
+    local visualDelay = math.floor(1000 *
+        GAMESTATE:GetPlayerState(pn):GetPlayerOptions("ModsLevel_Preferred"):VisualDelay() + 0.5)
+    if visualDelay ~= nil and visualDelay ~= 0 then comment = comment .. ", " .. visualDelay .. "ms (Vis.Del)" end
 
     local turn = GAMESTATE:GetPlayerState(pn):GetPlayerOptionsArray("ModsLevel_Preferred")
 
     local turnLabels = {
-        Mirror        = ", Mirror",
-        Left          = ", Left",
-        Right         = ", Right",
-        LRMirror      = ", LR-Mirror",
-        UDMirror      = ", UD-Mirror",
-        Shuffle       = ", Shuffle",
-        SuperShuffle  = ", Blender",
-        HyperShuffle  = ", Random",
-        Backwards     = ", Backwards"
+        Mirror       = ", Mirror",
+        Left         = ", Left",
+        Right        = ", Right",
+        LRMirror     = ", LR-Mirror",
+        UDMirror     = ", UD-Mirror",
+        Shuffle      = ", Shuffle",
+        SuperShuffle = ", Blender",
+        HyperShuffle = ", Random",
+        Backwards    = ", Backwards"
     }
 
     for i, o in ipairs(turn) do
@@ -596,27 +616,28 @@ end
 --------------------------------------------------------------------------------------------------
 
 local function SongResultData(player, APIKey, style, gameMode)
-    
     local pn = ToEnumShortString(player)
 
     local song = GAMESTATE:GetCurrentSong()
 
     -- Song Data
     local songInfo = {
-        name   = escapeString(song:GetTranslitFullTitle()),
-        artist = escapeString(song:GetTranslitArtist()),
-        pack   = escapeString(song:GetGroupName()),
-        length = string.format("%d:%02d", math.floor(song:MusicLengthSeconds()/60), math.floor(song:MusicLengthSeconds()%60)),
-        stepartist = escapeString(GAMESTATE:GetCurrentSteps(player):GetAuthorCredit()),
-        difficulty = GAMESTATE:GetCurrentSteps(player):GetMeter(),
+        name        = escapeString(song:GetTranslitFullTitle()),
+        artist      = escapeString(song:GetTranslitArtist()),
+        pack        = escapeString(song:GetGroupName()),
+        length      = string.format("%d:%02d", math.floor(song:MusicLengthSeconds() / 60),
+            math.floor(song:MusicLengthSeconds() % 60)),
+        stepartist  = escapeString(GAMESTATE:GetCurrentSteps(player):GetAuthorCredit()),
+        difficulty  = GAMESTATE:GetCurrentSteps(player):GetMeter(),
         description = escapeString(GAMESTATE:GetCurrentSteps(player):GetDescription()),
-        hash = tostring(SL[pn].Streams.Hash),
-        modifiers = comment(player)
+        hash        = tostring(SL[pn].Streams.Hash),
+        modifiers   = comment(player)
     }
 
     -- Result Data
     local resultInfo = {
-        score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
+        score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub(
+            "%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
         radar = getRadar(player),
@@ -625,7 +646,7 @@ local function SongResultData(player, APIKey, style, gameMode)
 
     local scatterplotData, worst_window = getScatterplotData(player, 1000, 200)
     local scatterplotDataJson = encode(scatterplotData)
-    
+
     local lifebarInfo = GetLifebarData(player, 1000, 200)
     local lifebarInfoJson = encode(lifebarInfo)
 
@@ -653,33 +674,31 @@ local function SongResultData(player, APIKey, style, gameMode)
         encode(resultInfo.radar),
         gameMode,
         version
-        )  
+    )
 
     return jsonData
-
 end
 
 --------------------------------------------------------------------------------------------------
 
 local function CourseResultData(player, APIKey, style, gameMode)
-    
     local pn = ToEnumShortString(player)
 
     local course = GAMESTATE:GetCurrentCourse()
     local trail = GAMESTATE:GetCurrentTrail(player)
 
-    
+
 
     -- Course Data
     local courseInfo = {
-        name   = escapeString(course:GetTranslitFullTitle()),
-        pack   = escapeString(course:GetGroupName()),
-        difficulty = trail:GetMeter(),
+        name        = escapeString(course:GetTranslitFullTitle()),
+        pack        = escapeString(course:GetGroupName()),
+        difficulty  = trail:GetMeter(),
         description = escapeString(course:GetDescription()),
-        entries = "",
-        hash = BinaryToHex(CRYPTMAN:SHA1File(course:GetCourseDir())):sub(1, 16),
-        scripter = escapeString(course:GetScripter()),
-        modifiers = comment(player)
+        entries     = "",
+        hash        = BinaryToHex(CRYPTMAN:SHA1File(course:GetCourseDir())):sub(1, 16),
+        scripter    = escapeString(course:GetScripter()),
+        modifiers   = comment(player)
     }
 
     local trailSteps = trail:GetTrailEntries()
@@ -694,20 +713,21 @@ local function CourseResultData(player, APIKey, style, gameMode)
             }
         )
     end
-    courseInfo.entries = encode(entries)   
+    courseInfo.entries = encode(entries)
 
     -- Result Data
     local resultInfo = {
         --playerName = escapeString(GAMESTATE:GetPlayerDisplayName(player)), -- unnecessary
-        score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub("%%", ""),
+        score = FormatPercentScore(STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetPercentDancePoints()):gsub(
+            "%%", ""),
         exscore = ("%.2f"):format(CalculateExScore(player)),
         grade = STATSMAN:GetCurStageStats():GetPlayerStageStats(player):GetGrade(),
         radar = getRadar(player),
     }
 
-    
+
     local lifebarInfo = GetLifebarData(player, 1000, 200) --table
-    local lifebarInfoJson = encode(lifebarInfo) --string
+    local lifebarInfoJson = encode(lifebarInfo)           --string
 
 
     -- Prepare JSON data
@@ -730,10 +750,9 @@ local function CourseResultData(player, APIKey, style, gameMode)
         encode(resultInfo.radar),
         gameMode,
         version
-        )
+    )
 
     return jsonData
-
 end
 
 --------------------------------------------------------------------------------------------------
@@ -752,9 +771,8 @@ u["ScreenEvaluationStage"] = Def.Actor {
             local partValid, allValid = ValidForGrooveStats(player)
 
             if gameMode == "pump" then
-
                 partValid[7] = validatePumpWindows(player)
-                
+
                 allValid = true
                 for i, valid in ipairs(partValid) do
                     if i ~= 1 and not valid then
@@ -762,7 +780,6 @@ u["ScreenEvaluationStage"] = Def.Actor {
                         break
                     end
                 end
-
             end
 
             local botURL, APIKey = readURLandKey(player)
@@ -770,13 +787,15 @@ u["ScreenEvaluationStage"] = Def.Actor {
             if botURL ~= nil and APIKey ~= nil then
                 if allValid then
                     local data = SongResultData(player, APIKey, style, gameMode)
-                    
+
                     -- Use chunked sending for potentially large data
                     sendDataInChunks(data, botURL, function(code, body)
                         if code == 200 then
                             SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " Score successfully submitted.")
                         else
-                            SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                            SM("DiscordLeaderboard: " ..
+                                ToEnumShortString(player) ..
+                                ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                         end
                     end)
                 else
@@ -787,42 +806,41 @@ u["ScreenEvaluationStage"] = Def.Actor {
                             table.insert(failed, tostring(i))
                         end
                     end
-                    SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Failed checks: " .. table.concat(failed, ", ") .. ". Check player options. (Same rules as for GS apply)")
+                    SM("DiscordLeaderboard: " ..
+                        ToEnumShortString(player) ..
+                        " invalid score. Failed checks: " ..
+                        table.concat(failed, ", ") .. ". Check player options. (Same rules as for GS apply)")
                 end
             else
-                SM("DiscordLeaderboard: Invalid data for player " .. ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
+                SM("DiscordLeaderboard: Invalid data for player " ..
+                    ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
             end
-        
         end
-
     end
 }
 
 
 u["ScreenEvaluationNonstop"] = Def.ActorFrame {
-    ModuleCommand=function(self)
-        
+    ModuleCommand = function(self)
         local fixed = GAMESTATE:GetCurrentCourse():AllSongsAreFixed()
         local autogen = GAMESTATE:GetCurrentCourse():IsAutogen()
         local endless = GAMESTATE:GetCurrentCourse():IsEndless()
 
         -- Would be kinda unfair
         if fixed and not autogen and not endless then
-            
             -- "dance" or "pump"
             local gameMode = GAMESTATE:GetCurrentGame():GetName()
             -- single, versus, double
             local style = GAMESTATE:GetCurrentStyle():GetName()
             if style == "versus" then style = "single" end
-            
+
             for player in ivalues(GAMESTATE:GetHumanPlayers()) do
                 -- Doesn't return true for courses, but I can use everything else lol
                 local partValid, allValid = ValidForGrooveStats(player)
-                
+
                 if gameMode == "pump" then
-                	
-		            partValid[7] = validatePumpWindows(player)
-                    
+                    partValid[7] = validatePumpWindows(player)
+
                     allValid = true
                     for i, valid in ipairs(partValid) do
                         if (i ~= 3 and i ~= 1) and not valid then
@@ -830,9 +848,7 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                             break
                         end
                     end
-                
                 else
-
                     allValid = true
                     for i, valid in ipairs(partValid) do
                         if i ~= 3 and not valid then
@@ -840,35 +856,125 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                             break
                         end
                     end
-
                 end
 
                 local botURL, APIKey = readURLandKey(player)
                 if botURL ~= nil and APIKey ~= nil then
                     if allValid then
-                    -- Different day different data
-                    local data = CourseResultData(player, APIKey, style, gameMode)
-                        
+                        -- Different day different data
+                        local data = CourseResultData(player, APIKey, style, gameMode)
+
                         -- Use chunked sending for potentially large data
                         sendDataInChunks(data, botURL, function(code, body)
                             if code == 200 then
-                                SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " Score successfully submitted.")
+                                SM("DiscordLeaderboard: " ..
+                                    ToEnumShortString(player) .. " Score successfully submitted.")
                             else
-                                SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                                SM("DiscordLeaderboard: " ..
+                                    ToEnumShortString(player) ..
+                                    ". Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                             end
                         end)
                     else
-                        SM("DiscordLeaderboard: " .. ToEnumShortString(player) .. " invalid score. Check player options. (Same rules as for GS apply)")
+                        SM("DiscordLeaderboard: " ..
+                            ToEnumShortString(player) ..
+                            " invalid score. Check player options. (Same rules as for GS apply)")
                     end
                 else
-                    SM("DiscordLeaderboard: Invalid data for player " .. ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
+                    SM("DiscordLeaderboard: Invalid data for player " ..
+                        ToEnumShortString(player) .. ". Bot URL or API key is missing or invalid.")
                 end
-                
             end
         end
-
     end
 }
 
+-- This has been borrowed from ArrowCloud Blue Shift Module
+-- That has been based on this module actually lol
+-- https://arrowcloud.dance/
+u["ScreenTitleMenu"] = Def.ActorFrame {
+    InitCommand = function(self)
+        self:xy(SCREEN_LEFT + 8, SCREEN_TOP + 50):zoom(0.8)
+    end,
+    ModuleCommand = function(self)
+        self:queuecommand("CheckConnection")
+    end,
+
+    -- Perform the auth check.
+    CheckConnectionCommand = function(self)
+        local bmt = self:GetChild("Status")
+        local errMsg = self:GetChild("ErrorMessage")
+        if not bmt then return end
+
+        -- start with a neutral label while checking
+        bmt:settext("DiscordLeaderboard: checking…")
+
+        -- Hit the hello-world endpoint (root) without auth headers.
+        local url = normalizeBotURL(botURL) .. "/hello"
+        NETWORK:HttpRequest {
+            url = url,
+            method = "GET",
+            connectTimeout = 6,
+            transferTimeout = 6,
+            onResponse = function(response)
+                -- Treat HTTP 200 as success; anything else (including errors) as failure.
+                local ok = false
+                if type(response) == "table" and response.statusCode == 200 then
+                    ok = true
+                end
+                -- Log details safely (truncate body, avoid secrets)
+                local status = response and response.statusCode or "(nil)"
+                local err = response and response.error and ToEnumShortString(response.error) or nil
+                local body = response and response.body or ""
+                if type(body) ~= "string" then body = tostring(body) end
+                if #body > 256 then body = body:sub(1, 256) .. "…" end
+
+                local decoded = JsonDecode((response and response.body) or "")
+                local versionReceived = decoded and decoded.status or nil
+
+                if versionReceived ~= version then
+                    ok = false
+                    err = "Mismatch"
+                end
+
+                debugPrint("Hello-check: status=" ..
+                    tostring(status) .. (err and (" error=" .. err) or "") .. " body=" .. body)
+
+                if ok then
+                    bmt:settext("✔ DiscordLeaderboard")
+                else
+                    bmt:settext("❌ DiscordLeaderboard")
+                    if err == "Blocked" then
+                        errMsg:settext("Host not configured in Preferences.ini\nAdd " ..
+                            normalizeBotHost(botURL) .. " to HttpAllowHosts")
+                    elseif err == "Mismatch" then
+                        errMsg:settext("Version mismatch! Module version: " ..
+                            version .. ", expected: " .. versionReceived)
+                    else
+                        errMsg:settext("Error connecting to bot: " .. (err or "Unknown error"))
+                    end
+                end
+            end
+        }
+    end,
+
+    -- The text node we update
+    LoadFont("Common Normal") .. {
+        Name = "Status",
+        InitCommand = function(self)
+            self:halign(0)
+            self:settext("DiscordLeaderboard")
+        end
+    },
+
+    LoadFont("Common Normal") .. {
+        Name = "ErrorMessage",
+        InitCommand = function(self)
+            self:xy(0, 24):halign(0)
+            self:zoom(0.6)
+            self:settext("")
+        end
+    }
+}
 
 return u
