@@ -12,9 +12,11 @@ import time
 from dotenv import load_dotenv
 load_dotenv()
 
+from commands.api_keys import file_pack, registration_message
 from utility.library import *
 from utility.plot import *
 from utility.config import database
+from utility.embeds import embedded_score
 from utility.version import APP_VERSION
 
 
@@ -87,6 +89,7 @@ async def on_ready():
     except Exception as e:
         print(f"An error occurred while syncing commands: {e}")
 
+    await send_update_notification()
 
 #================================================================================================
 # Database
@@ -98,11 +101,18 @@ def init_db():
     conn = sqlite3.connect(database)
     c = conn.cursor()
 
+    c.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'CONFIG'")
+    config_table_exists = c.fetchone() is not None
+
     c.execute('''CREATE TABLE IF NOT EXISTS CONFIG
-                    (version TEXT PRIMARY KEY)''')
+                    (version TEXT PRIMARY KEY,
+              updateNotificationSent BOOL DEFAULT 0)''')
+
+    if not config_table_exists:
+        c.execute('INSERT INTO CONFIG (version) VALUES (?)', (version,))
 
     c.execute('''CREATE TABLE IF NOT EXISTS USERS
-                 (DiscordUser TEXT PRIMARY KEY, APIKey TEXT, submitDisabled TEXT DEFAULT 'enabled')''')
+                 (DiscordUser TEXT PRIMARY KEY, APIKey TEXT, submitDisabled TEXT DEFAULT 'enabled', updateNotification BOOL DEFAULT 1)''')
     
     c.execute('''CREATE TABLE IF NOT EXISTS CHANNELS
                  (serverID TEXT, channelID TEXT, PRIMARY KEY (serverID, channelID))''')
@@ -141,14 +151,20 @@ init_db()
 
 
 #================================================================================================
-# Cleanup tasks on startup
+# Database cleanup tasks on startup
 # This stuff here is cleaning up shit from the previous version(s).
 #================================================================================================
 
 # Remove unnecessary precision from scatterplot and lifebar data
-def squash_db():
+# Add updateNotification column to USERS table if it doesn't exist
+def update_140():
     conn = sqlite3.connect(database)
     c = conn.cursor()
+
+    c.execute(f"ALTER TABLE USERS ADD COLUMN updateNotification BOOL DEFAULT 1")
+    c.execute(f"ALTER TABLE CONFIG ADD COLUMN updateNotificationSent BOOL DEFAULT 0")
+    conn.commit()
+    
     c.execute('SELECT version FROM CONFIG')
     row = c.fetchone()
     conn.close()
@@ -160,26 +176,69 @@ def squash_db():
         logger.info(f"Squashing and compacting database. This might take a while...")
         backup_and_squash(database, logger, decimal_places=3, compact=True)
 
-        conn = sqlite3.connect(database)
-        c = conn.cursor()
-        c.execute('DELETE FROM CONFIG')
-        c.execute('INSERT INTO CONFIG (version) VALUES (?)', (version,))
-        conn.commit()
-        conn.close()
-squash_db()
+
+conn = sqlite3.connect(database)
+c = conn.cursor()
+c.execute('SELECT version FROM CONFIG')
+row = c.fetchone()
+if not row or row[0] is None:
+    update_140()
+conn.close()
 
 # Set version in the database to match the current version of the bot. 
 # This is used to determine if future updates need to run any cleanup 
 # tasks and what order to apply them in.
 conn = sqlite3.connect(database)
 c = conn.cursor()
-c.execute('DELETE FROM CONFIG')
-c.execute('INSERT INTO CONFIG (version) VALUES (?)', (version,))
-conn.commit()
+c.execute('SELECT version FROM CONFIG')
+row = c.fetchone()
+if not row or row[0] != version:
+    c.execute('DELETE FROM CONFIG')
+    c.execute('INSERT INTO CONFIG (version, updateNotificationSent) VALUES (?, ?)', (version, 0))
+    conn.commit()
+    logger.info(f"Database has been updated to version {version}")
 conn.close()
-logger.info(f"Database has been updated to version {version}")
 
-from utility.embeds import embedded_score
+
+async def send_update_notification():
+    bot_url = os.getenv('BOT_URL')
+    if not bot_url:
+        logger.warning("Skipping update notifications because BOT_URL is not configured.")
+        return
+
+    conn = sqlite3.connect(database)
+    c = conn.cursor()
+
+    c.execute('SELECT updateNotificationSent FROM CONFIG')
+    notif_sent = c.fetchone()
+    conn.close()
+
+    if notif_sent and not notif_sent[0]:
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+
+        c.execute('UPDATE CONFIG SET updateNotificationSent = 1 WHERE version = ?', (version,))
+        conn.commit()
+
+        c.execute("SELECT DiscordUser, APIKey FROM USERS WHERE APIKey IS NOT NULL AND APIKey != '' AND updateNotification = 1")
+        users_to_notify = c.fetchall()
+        conn.close()
+
+        for user_id, api_key in users_to_notify:
+            try:
+                user = client.get_user(int(user_id)) or await client.fetch_user(int(user_id))
+                pack_file = file_pack(api_key, bot_url)
+                await user.send(
+                    f"The bot has been updated to version `{version}`. Please replace your local files with the attached package.\n{registration_message}",
+                    file=pack_file
+                )
+            except discord.Forbidden:
+                logger.warning(f"Could not send update notification to user {user_id}: DMs are disabled.")
+            except discord.HTTPException as exc:
+                logger.warning(f"Could not send update notification to user {user_id}: {exc}")
+            except Exception:
+                logger.exception(f"Unexpected error while sending update notification to user {user_id}")
+        logger.info(f"Sent update notifications to {len(users_to_notify)} users.")
 
 
 #================================================================================================
