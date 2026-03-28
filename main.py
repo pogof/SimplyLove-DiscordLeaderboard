@@ -15,9 +15,10 @@ load_dotenv()
 from utility.library import *
 from utility.plot import *
 from utility.config import database
+from utility.version import APP_VERSION
 
 
-version = "1.4.0"
+version = APP_VERSION
 
 
 #================================================================================================

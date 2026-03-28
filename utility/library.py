@@ -1,4 +1,20 @@
 import json
+from urllib.parse import urlparse
+
+#================================================================================================
+# Get bare domain from URL
+#================================================================================================
+
+def extract_domain(url):
+
+    if not url:
+        return None
+
+    if not url.startswith(('http://', 'https://')):
+        url = f'http://{url}'
+    
+    parsed = urlparse(url)
+    return parsed.netloc
 
 #================================================================================================
 # Mappings lol

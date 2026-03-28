@@ -8,9 +8,23 @@
 -- server to receive the data and do with it as they please.
 --
 -- The module version corresponds to the original backend version.
--- DO NOT CHANGE THIS NUMBER  
-version = "1.4.0"
----------------------------------------------------------------------------------------------------
+-- DO NOT CHANGE THESE UNLESS YOU ARE THE SERVER ADMINISTRATOR. It will stop sending the results to the server.  
+local version = nil
+local botURL = nil
+--------------------------------------------------------------------------------------------------
+
+-- Normalize botURL to base URL
+local function normalizeBotURL(url)
+    if not url then return nil end
+    -- Prepend https:// if no scheme is present
+    if not url:match("^https?://") then
+        url = "https://" .. url
+    end
+    -- Strip any trailing path/slash, keep only scheme + host
+    return url:match("^(https?://[^/]+)") or url
+end
+
+--------------------------------------------------------------------------------------------------
 
 local function debugPrint(message)
     Trace("[DiscordLeaderboard] "..message)
@@ -112,50 +126,29 @@ end
 
 local function readURLandKey(player)
 
-    local pdir
-    if player == PLAYER_1 then
-        pdir = 0
-    else
-        pdir = 1
-    end
-
-    local profilePath = PROFILEMAN:GetProfileDir(pdir)
+    local playerIndex = (player == PLAYER_1) and 0 or 1
+    local profilePath = PROFILEMAN:GetProfileDir(playerIndex)
 
 
     if profilePath == "" then
         return nil, nil
     end
 
-    --All hail the mighty browsers who decided downloading ini as txt is good idea
-    local filePaths = {profilePath.."DiscordLeaderboard.ini", profilePath.."DiscordLeaderboard.txt"}
+  
+    local filePath = profilePath.."DiscordLeaderboard.ini"
 
-    local botURL, apiKey
+    local APIKey
 
-    for _, filePath in ipairs(filePaths) do
-        local f = RageFileUtil.CreateRageFile()
-        if f:Open(filePath, 1) then
-            while true do
-                local line = f:GetLine()
-                if line == "" then break end
-                if line:match("^BotURL=") then
-                    botURL = line:gsub("BotURL=", "")
-                elseif line:match("^APIKey=") then
-                    apiKey = line:gsub("APIKey=", "")
-                end
-            end
-            f:destroy()
-            if botURL and apiKey then
-                return botURL, apiKey
-            end
-        else
-            local fError = f:GetError()
-            debugPrint("Error opening file: ".. fError)
-            f:ClearError()
-            f:destroy()
+    local contents = IniFile.ReadFile(filePath)
+    if contents["DiscordLeaderboard"] then
+        if contents["DiscordLeaderboard"]["APIKey"] then
+            APIKey = contents["DiscordLeaderboard"]["APIKey"]
+            return normalizeBotURL(botURL), APIKey
         end
+    else
+        debugPrint("DiscordLeaderboard.ini not found or has an incorrect format.") 
+        return nil, nil
     end
-
-    return nil, nil
 
 end
 
@@ -272,7 +265,7 @@ local function sendDataInChunks(data, botURL, callback)
     -- If data is small enough, send normally
     if dataSize < 500000 then -- 500KB limit
         debugPrint("Data size is manageable, sending normally")
-        return sendData(data, botURL, callback)
+        return sendData(data, botURL .. "/send", callback)
     end
     
     debugPrint("Data is large, attempting to send in chunks")
@@ -281,7 +274,7 @@ local function sendDataInChunks(data, botURL, callback)
     local decoded = JsonDecode(data)
     if not decoded then
         debugPrint("Failed to parse data for chunking, sending normally")
-        return sendData(data, botURL, callback)
+        return sendData(data, botURL .. "/send", callback)
     end
     
     local scatterplotData = decoded.scatterplotData
@@ -297,7 +290,7 @@ local function sendDataInChunks(data, botURL, callback)
     
     if not needsChunking then
         debugPrint("No large arrays found, sending normally")
-        return sendData(data, botURL, callback)
+        return sendData(data, botURL .. "/send", callback)
     end
     
     -- Remove large arrays from main payload
@@ -323,26 +316,9 @@ local function sendDataInChunks(data, botURL, callback)
     
     local mainData = encode(decoded)
     
-    -- Smart URL handling - ensure we have the right endpoints
-    local baseURL = botURL
-    local chunkURL, sendURL
-    
-    if string.match(baseURL, "/send$") then
-        -- If URL ends with /send, use base for send and base-without-send + /chunk for chunks
-        sendURL = baseURL
-        chunkURL = string.gsub(baseURL, "/send$", "/chunk")
-    else
-        -- If URL doesn't end with /send, assume it's base URL
-        if string.match(baseURL, "/$") then
-            -- URL ends with /, just append endpoints
-            sendURL = baseURL .. "send"
-            chunkURL = baseURL .. "chunk"
-        else
-            -- URL doesn't end with /, add / and endpoints
-            sendURL = baseURL .. "/send"
-            chunkURL = baseURL .. "/chunk"
-        end
-    end
+    -- botURL is already normalized to base URL
+    local sendURL = botURL .. "/send"
+    local chunkURL = botURL .. "/chunk"
     
     debugPrint("Using URLs - Chunks: " .. chunkURL .. ", Main data: " .. sendURL)
     debugPrint("Sending " .. scatterChunks .. " scatterplot chunks and " .. lifebarChunks .. " lifebar chunks first, then main data")
@@ -619,7 +595,7 @@ end
 
 --------------------------------------------------------------------------------------------------
 
-local function SongResultData(player, apiKey, style, gameMode)
+local function SongResultData(player, APIKey, style, gameMode)
     
     local pn = ToEnumShortString(player)
 
@@ -657,7 +633,7 @@ local function SongResultData(player, apiKey, style, gameMode)
     -- Prepare JSON data
     local jsonData = string.format(
         '{"api_key": "%s","songName": "%s","artist": "%s","pack": "%s","length": "%s","stepartist": "%s","difficulty": "%s", "description": "%s", "itgScore": "%s","exScore": "%s","grade": "%s", "hash": "%s", "scatterplotData": %s, "lifebarInfo": %s, "worstWindow": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s", "version": "%s"}',
-        apiKey,
+        APIKey,
         songInfo.name,
         songInfo.artist,
         songInfo.pack,
@@ -685,7 +661,7 @@ end
 
 --------------------------------------------------------------------------------------------------
 
-local function CourseResultData(player, apiKey, style, gameMode)
+local function CourseResultData(player, APIKey, style, gameMode)
     
     local pn = ToEnumShortString(player)
 
@@ -737,7 +713,7 @@ local function CourseResultData(player, apiKey, style, gameMode)
     -- Prepare JSON data
     local jsonData = string.format(
         '{"api_key": "%s", "courseName": "%s", "pack": "%s", "entries": %s, "hash": "%s", "scripter": "%s", "difficulty": "%s", "description": "%s", "itgScore": "%s", "exScore": "%s", "grade": "%s", "lifebarInfo": %s, "style": "%s", "mods": "%s", "radar": %s, "gameMode": "%s", "version": "%s"}',
-        apiKey,
+        APIKey,
         courseInfo.name,
         courseInfo.pack,
         courseInfo.entries,
@@ -789,11 +765,11 @@ u["ScreenEvaluationStage"] = Def.Actor {
 
             end
 
-            local botURL, apiKey = readURLandKey(player)
+            local botURL, APIKey = readURLandKey(player)
 
-            if botURL ~= nil and apiKey ~= nil then
+            if botURL ~= nil and APIKey ~= nil then
                 if allValid then
-                    local data = SongResultData(player, apiKey, style, gameMode)
+                    local data = SongResultData(player, APIKey, style, gameMode)
                     
                     -- Use chunked sending for potentially large data
                     sendDataInChunks(data, botURL, function(code, body)
@@ -867,11 +843,11 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
 
                 end
 
-                local botURL, apiKey = readURLandKey(player)
-                if botURL ~= nil and apiKey ~= nil then
+                local botURL, APIKey = readURLandKey(player)
+                if botURL ~= nil and APIKey ~= nil then
                     if allValid then
                     -- Different day different data
-                    local data = CourseResultData(player, apiKey, style, gameMode)
+                    local data = CourseResultData(player, APIKey, style, gameMode)
                         
                         -- Use chunked sending for potentially large data
                         sendDataInChunks(data, botURL, function(code, body)
