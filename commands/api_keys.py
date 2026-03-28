@@ -241,6 +241,37 @@ class APIKeysCog(commands.Cog):
 
         await interaction.response.send_message("Submitting scores has been enabled.", ephemeral=True)
 
+    #================================================================================================
+    # Toggle Update Notifications
+    #================================================================================================
+
+    @app_commands.command(name="updatenotifications", description="Toggles receiving update notifications in DM.")
+    async def update_notifications(self, interaction: discord.Interaction):
+        # if interaction.guild is None:
+        #     await interaction.response.send_message("This command can only be used in a server.")
+        #     return
+
+        user_id = str(interaction.user.id)
+
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        c.execute('SELECT updateNotification FROM USERS WHERE DiscordUser = ?', (user_id,))
+        row = c.fetchone()
+
+        if not row:
+            await interaction.response.send_message('You are not registered yet. Use the /register command first.', ephemeral=True)
+            return
+
+        current_setting = row[0]
+        new_setting = not current_setting
+
+        c.execute('UPDATE USERS SET updateNotification = ? WHERE DiscordUser = ?', (new_setting, user_id))
+        conn.commit()
+        conn.close()
+
+        status = "enabled" if new_setting else "disabled"
+        await interaction.response.send_message(f"Update notifications have been {status}.", ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(APIKeysCog(bot))

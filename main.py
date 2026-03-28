@@ -229,7 +229,7 @@ async def send_update_notification():
                 user = client.get_user(int(user_id)) or await client.fetch_user(int(user_id))
                 pack_file = file_pack(api_key, bot_url)
                 await user.send(
-                    f"The bot has been updated to version `{version}`. Please replace your local files with the attached package.\n{registration_message}",
+                    f"The bot has been updated to version `{version}`. Please replace your local files with the attached package.\n{registration_message}\n If you wish to disable update notifications, use the `/updatenotifications` command.",
                     file=pack_file
                 )
             except discord.Forbidden:
