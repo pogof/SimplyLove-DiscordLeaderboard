@@ -349,6 +349,12 @@ def send_message():
         logger.error("Submission missing required data")
         return jsonify({'status': 'Submission is missing data. Update module to the latest version.'}), 400
     
+    # Limit valid submissions to ITL Online 2026 if the environment variable is set 
+    pack_name = data.get('pack') or ''
+    if os.getenv('ITL2026_ONLY', '').lower() == 'true' and 'itl online 2026' not in pack_name.lower():
+        logger.info(f"Rejected non-ITL submission for pack: {pack_name}")
+        return jsonify({'status': 'Only ITL Online 2026 submissions are accepted.'}), 403
+
     isPB = True
     tableType = ''
 
