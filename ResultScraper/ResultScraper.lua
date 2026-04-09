@@ -726,36 +726,39 @@ u["ScreenEvaluationStage"] = Def.ActorFrame {
             local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
             local botURL, APIKey = readURLandKey(player)
-
-            if botURL ~= nil and APIKey ~= nil then
-                if allValid then
-                    label:settext("DiscordLeaderboard: Submitting…")
-                    local data = SongResultData(player, APIKey, style, gameMode)
-
-                    -- Use chunked sending for potentially large data
-                    sendDataInChunks(data, botURL, function(code, body)
-                        if code == 200 then
-                            label:settext("✔ DiscordLeaderboard: Submitted!")
-                        else
-                            label:settext("❌ DiscordLeaderboard: Submission Failed.")
-                            errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
-                        end
-                    end)
-                else
-                    local failed = {}
-                    for i, valid in ipairs(partValid) do
-                        if i ~= 1 and not valid then
-                            table.insert(failed,
-                                invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
-                        end
-                    end
-                    label:settext("❌ DiscordLeaderboard: Invalid Score.")
-                    errLabel:settext(table.concat(failed, "\n"))
-                end
-            else
+            if botURL == nil and APIKey == nil then
                 label:settext("❌ DiscordLeaderboard: Invalid Data.")
-                errLabel:settext("Your INI file is invalid.")
+                errLabel:settext("Your INI file is missing or invalid.")
+                return
             end
+
+            if allValid then
+                label:settext("DiscordLeaderboard: Submitting…")
+                errLabel:settext("")
+            else
+                local failed = {}
+                for i, valid in ipairs(partValid) do
+                    if not valid then
+                        table.insert(failed,
+                            invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
+                    end
+                end
+                label:settext("❌ DiscordLeaderboard: Invalid Score.")
+                errLabel:settext(table.concat(failed, "\n"))
+                return
+            end
+
+            local data = SongResultData(player, APIKey, style, gameMode)
+
+            -- Use chunked sending for potentially large data
+            sendDataInChunks(data, botURL, function(code, body)
+                if code == 200 then
+                    label:settext("✔ DiscordLeaderboard: Submitted!")
+                else
+                    label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                    errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                end
+            end)
         end
     end,
     LoadFont("Common Normal") .. {
@@ -806,63 +809,65 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
         local autogen = GAMESTATE:GetCurrentCourse():IsAutogen()
         local endless = GAMESTATE:GetCurrentCourse():IsEndless()
 
-        -- Would be kinda unfair
-        if fixed and not autogen and not endless then
-            -- "dance" or "pump"
-            local gameMode = GAMESTATE:GetCurrentGame():GetName()
-            -- single, versus, double
-            local style = GAMESTATE:GetCurrentStyle():GetName()
-            if style == "versus" then style = "single" end
+        -- "dance" or "pump"
+        local gameMode = GAMESTATE:GetCurrentGame():GetName()
+        -- single, versus, double
+        local style = GAMESTATE:GetCurrentStyle():GetName()
+        if style == "versus" then style = "single" end
 
-            for player in ivalues(GAMESTATE:GetHumanPlayers()) do
-                -- Doesn't return true for courses, but I can use everything else lol
-                local partValid, allValid = ValidForGrooveStats(player)
+        for player in ivalues(GAMESTATE:GetHumanPlayers()) do
 
-                local pn = ToEnumShortString(player)
-                local label = (pn == "P1") and p1Text or p2Text
-                local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
+            local pn = ToEnumShortString(player)
+            local label = (pn == "P1") and p1Text or p2Text
+            local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
-                allValid = true
-                for i, valid in ipairs(partValid) do
-                    if i ~= 3 and not valid then
-                        allValid = false
-                        break
-                    end
-                end
+            -- Would be kinda unfair
+            if not fixed or autogen or endless then
+                label:settext("❌ DiscordLeaderboard: Unsupported Course Type.")
+                errLabel:settext("Autogen or Endless course")
+                return
+            end
 
-                local botURL, APIKey = readURLandKey(player)
-                if botURL ~= nil and APIKey ~= nil then
-                    if allValid then
-                        -- Different day different data
-                        local data = CourseResultData(player, APIKey, style, gameMode)
 
-                        -- Use chunked sending for potentially large data
-                        sendDataInChunks(data, botURL, function(code, body)
-                            if code == 200 then
-                                label:settext("✔ DiscordLeaderboard: Submitted!")
-                            else
-                                label:settext("❌ DiscordLeaderboard: Submission Failed.")
-                                errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
-                            end
-                        end)
-                    else
-                        local failed = {}
-                        for i, valid in ipairs(partValid) do
-                            if i ~= 1 and not valid then
-                                if i ~= 3 then
-                                    table.insert(failed,
-                                        invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
-                                end
-                            end
-                        end
-                        label:settext("❌ DiscordLeaderboard: Invalid Score.")
-                        errLabel:settext(table.concat(failed, "\n"))
-                    end
-                else
-                    label:settext("❌ DiscordLeaderboard: Invalid Data.")
-                    errLabel:settext("Error: Invalid data. Bot URL or API key is missing or invalid.")
+            local botURL, APIKey = readURLandKey(player)
+            if botURL == nil and APIKey == nil then
+                label:settext("❌ DiscordLeaderboard: Invalid Data.")
+                errLabel:settext("Your INI file is missing or invalid.")
+                return
+            end
+
+            -- Doesn't return true for courses, but I can use everything else lol
+            local partValid, allValid = ValidForGrooveStats(player)
+            allValid = true
+            local failed = {}
+            for i, valid in ipairs(partValid) do
+                if i ~= 3 and not valid then
+                    allValid = false
+                    table.insert(failed, invalidMapping[i] or ("Unknown error (check " .. tostring(i) .. ")"))
                 end
             end
+
+            if allValid then
+                label:settext("DiscordLeaderboard: Submitting…")
+                errLabel:settext("")
+            else
+                label:settext("❌ DiscordLeaderboard: Invalid Score.")
+                errLabel:settext(table.concat(failed, "\n"))
+                return
+            end
+
+            -- Different day different data
+            local data = CourseResultData(player, APIKey, style, gameMode)
+
+            -- Use chunked sending for potentially large data
+            sendDataInChunks(data, botURL, function(code, body)
+                if code == 200 then
+                    label:settext("✔ DiscordLeaderboard: Submitted!")
+                else
+                    label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                    errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
+                end
+             end)
         end
     end,
     LoadFont("Common Normal") .. {
