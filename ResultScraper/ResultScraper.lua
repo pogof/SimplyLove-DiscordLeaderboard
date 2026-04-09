@@ -990,4 +990,56 @@ u["ScreenTitleMenu"] = Def.ActorFrame {
     }
 }
 
+u["ScreenSelectCourse"] = Def.ActorFrame {
+    ModuleCommand = function(self)
+        self:queuecommand("UpdateCourseStatus")
+    end,
+    CurrentCourseChangedMessageCommand = function(self)
+        self:queuecommand("UpdateCourseStatus")
+    end,
+    UpdateCourseStatusCommand = function(self)
+        local marker = self:GetChild("CourseEligibility")
+        local reason = self:GetChild("CourseEligibilityReason")
+        if not marker then return end
+
+        local course = GAMESTATE:GetCurrentCourse()
+        if not course then
+            marker:settext("")
+            if reason then reason:settext("") end
+            return
+        end
+
+        local fixed = course:AllSongsAreFixed()
+        local autogen = course:IsAutogen()
+        local endless = course:IsEndless()
+
+        local reasons = {}
+        if not fixed then table.insert(reasons, "Not Fixed") end
+        if autogen then table.insert(reasons, "Autogen") end
+        if endless then table.insert(reasons, "Endless") end
+
+        if #reasons > 0 then
+            marker:settext("✖")
+            if reason then reason:settext(table.concat(reasons, ", ")) end
+        else
+            marker:settext("✔")
+            if reason then reason:settext("") end
+        end
+    end,
+    LoadFont("Common Normal") .. {
+        Name = "CourseEligibility",
+        InitCommand = function(self)
+            self:xy(SCREEN_LEFT + 465, SCREEN_TOP + 235):zoom(1):halign(0)
+            self:settext("")
+        end
+    },
+    LoadFont("Common Normal") .. {
+        Name = "CourseEligibilityReason",
+        InitCommand = function(self)
+            self:xy(SCREEN_LEFT + 465, SCREEN_TOP + 250):zoom(0.45):halign(0)
+            self:settext("")
+        end
+    }
+}
+
 return u
