@@ -69,84 +69,6 @@ end
 
 --------------------------------------------------------------------------------------------------
 
--- This section was stolen from SL-Helper-GrooveStats.lua
--- Values edited to work for pump mode
-
-local function validatePumpWindows(player)
-    local pn = ToEnumShortString(player)
-
-    -- Validate all other metrics.
-    local ExpectedTWA = 0.0015
-    local ExpectedWindows = {
-        0.021500 + ExpectedTWA, -- Fantastics
-        0.043000 + ExpectedTWA, -- Excellents
-        0.102000 + ExpectedTWA, -- Greats
-        0.135000 + ExpectedTWA, -- Decents
-        0.180000 + ExpectedTWA, -- Way Offs
-        0.320000 + ExpectedTWA, -- Holds
-        0.070000 + ExpectedTWA, -- Mines
-        0.350000 + ExpectedTWA, -- Rolls
-    }
-    local TimingWindows = { "W1", "W2", "W3", "W4", "W5", "Hold", "Mine", "Roll" }
-    local ExpectedLife = {
-        0.008,  -- Fantastics
-        0.008,  -- Excellents
-        0.004,  -- Greats
-        0.000,  -- Decents
-        -0.050, -- Way Offs
-        -0.100, -- Miss
-        0.000,  -- Let Go
-        0.000,  -- Held
-        -0.050, -- Hit Mine
-    }
-    local ExpectedScoreWeight = {
-        5,   -- Fantastics
-        4,   -- Excellents
-        2,   -- Greats
-        0,   -- Decents
-        -6,  -- Way Offs
-        -12, -- Miss
-        0,   -- Let Go
-        0,   -- Held
-        -6,  -- Hit Mine
-    }
-    local LifeWindows = { "W1", "W2", "W3", "W4", "W5", "Miss", "LetGo", "Held", "HitMine" }
-
-    -- Originally verify the ComboToRegainLife metrics.
-    local valid = (PREFSMAN:GetPreference("RegenComboAfterMiss") == 5 and PREFSMAN:GetPreference("MaxRegenComboAfterMiss") == 10)
-
-    local FloatEquals = function(a, b)
-        return math.abs(a - b) < 0.0001
-    end
-
-    valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "InitialValue"), 0.5)
-    valid = valid and PREFSMAN:GetPreference("HarshHotLifePenalty")
-
-    -- And then verify the windows themselves.
-    local TWA = PREFSMAN:GetPreference("TimingWindowAdd")
-    if SL.Global.GameMode == "ITG" then
-        for i, window in ipairs(TimingWindows) do
-            -- Only check if the Timing Window is actually "enabled".
-            if i > 5 or SL[pn].ActiveModifiers.TimingWindows[i] then
-                valid = valid and
-                    FloatEquals(PREFSMAN:GetPreference("TimingWindowSeconds" .. window) + TWA, ExpectedWindows[i])
-            end
-        end
-
-        for i, window in ipairs(LifeWindows) do
-            valid = valid and FloatEquals(THEME:GetMetric("LifeMeterBar", "LifePercentChange" .. window), ExpectedLife
-                [i])
-
-            valid = valid and
-                THEME:GetMetric("ScoreKeeperNormal", "PercentScoreWeight" .. window) == ExpectedScoreWeight[i]
-        end
-    end
-
-    return valid
-end
-
---------------------------------------------------------------------------------------------------
-
 local invalidMapping = {
     [1] = "Wrong Game (Only DANCE or PUMP is supported)",
     [2] = "Solo (6panel) is not supported",
@@ -803,18 +725,6 @@ u["ScreenEvaluationStage"] = Def.ActorFrame {
             local label = (pn == "P1") and p1Text or p2Text
             local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
-            if gameMode == "pump" then
-                partValid[7] = validatePumpWindows(player)
-
-                allValid = true
-                for i, valid in ipairs(partValid) do
-                    if i ~= 1 and not valid then
-                        allValid = false
-                        break
-                    end
-                end
-            end
-
             local botURL, APIKey = readURLandKey(player)
 
             if botURL ~= nil and APIKey ~= nil then
@@ -912,23 +822,11 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
                 local label = (pn == "P1") and p1Text or p2Text
                 local errLabel = (pn == "P1") and p1ErrMsg or p2ErrMsg
 
-                if gameMode == "pump" then
-                    partValid[7] = validatePumpWindows(player)
-
-                    allValid = true
-                    for i, valid in ipairs(partValid) do
-                        if (i ~= 3 and i ~= 1) and not valid then
-                            allValid = false
-                            break
-                        end
-                    end
-                else
-                    allValid = true
-                    for i, valid in ipairs(partValid) do
-                        if i ~= 3 and not valid then
-                            allValid = false
-                            break
-                        end
+                allValid = true
+                for i, valid in ipairs(partValid) do
+                    if i ~= 3 and not valid then
+                        allValid = false
+                        break
                     end
                 end
 
