@@ -167,15 +167,18 @@ def update_140():
     
     c.execute('SELECT version FROM CONFIG')
     row = c.fetchone()
-    conn.close()
     
     if not row:
         from utility.squash_db_precision import backup_and_squash
-
+        c.execute('DELETE FROM CONFIG')
+        c.execute('INSERT INTO CONFIG (version, updateNotificationSent) VALUES (?, ?)', (version, 0))
+        conn.commit()
+        conn.close()
         logger.info(f"Updating database version to {version}")
         logger.info(f"Squashing and compacting database. This might take a while...")
         backup_and_squash(database, logger, decimal_places=3, compact=True)
-
+        logger.info(f"Database has been updated to version {version}")
+    conn.close()
 
 conn = sqlite3.connect(database)
 c = conn.cursor()
@@ -183,7 +186,17 @@ c.execute('SELECT version FROM CONFIG')
 row = c.fetchone()
 if not row or row[0] is None:
     update_140()
-conn.close()
+
+# The Version is now set and if someone skipped an update,
+# they can update to the latest version straight up.
+# Thinking aloud, something like this?
+# while true:
+#   if version == "whatever":
+#       update_whatever()
+#   elif version == "whatever2":
+#       update_whatever2()
+#   else:
+#       break
 
 # Set version in the database to match the current version of the bot. 
 # This is used to determine if future updates need to run any cleanup 
@@ -192,7 +205,7 @@ conn = sqlite3.connect(database)
 c = conn.cursor()
 c.execute('SELECT version FROM CONFIG')
 row = c.fetchone()
-if not row or row[0] != version:
+if row[0] != version:
     c.execute('DELETE FROM CONFIG')
     c.execute('INSERT INTO CONFIG (version, updateNotificationSent) VALUES (?, ?)', (version, 0))
     conn.commit()
