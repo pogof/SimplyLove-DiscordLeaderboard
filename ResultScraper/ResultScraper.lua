@@ -733,7 +733,7 @@ u["ScreenEvaluationStage"] = Def.ActorFrame {
             end
 
             if allValid then
-                label:settext("DiscordLeaderboard: Submitting…")
+                label:settext("⏳ DiscordLeaderboard")
                 errLabel:settext("")
             else
                 local failed = {}
@@ -753,9 +753,9 @@ u["ScreenEvaluationStage"] = Def.ActorFrame {
             -- Use chunked sending for potentially large data
             sendDataInChunks(data, botURL, function(code, body)
                 if code == 200 then
-                    label:settext("✔ DiscordLeaderboard: Submitted!")
+                    label:settext("✔ DiscordLeaderboard")
                 else
-                    label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                    label:settext("❌ DiscordLeaderboard")
                     errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                 end
             end)
@@ -848,7 +848,7 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
             end
 
             if allValid then
-                label:settext("DiscordLeaderboard: Submitting…")
+                label:settext("⏳ DiscordLeaderboard")
                 errLabel:settext("")
             else
                 label:settext("❌ DiscordLeaderboard: Invalid Score.")
@@ -862,9 +862,9 @@ u["ScreenEvaluationNonstop"] = Def.ActorFrame {
             -- Use chunked sending for potentially large data
             sendDataInChunks(data, botURL, function(code, body)
                 if code == 200 then
-                    label:settext("✔ DiscordLeaderboard: Submitted!")
+                    label:settext("✔ DiscordLeaderboard")
                 else
-                    label:settext("❌ DiscordLeaderboard: Submission Failed.")
+                    label:settext("❌ DiscordLeaderboard")
                     errLabel:settext("Error: " .. tostring(code) .. ". Response: " .. tostring(body))
                 end
              end)
