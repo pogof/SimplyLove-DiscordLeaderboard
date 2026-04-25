@@ -89,7 +89,15 @@ local invalidMapping = {
 
 local function readURLandKey(player)
     local playerIndex = (player == PLAYER_1) and 0 or 1
-    local profilePath = PROFILEMAN:GetProfileDir(playerIndex)
+
+    local profile_slot = {
+        [PLAYER_1] = "ProfileSlot_Player1",
+        [PLAYER_2] = "ProfileSlot_Player2"
+    }
+
+    if not profile_slot[player] then return nil, nil end
+
+    local profilePath = PROFILEMAN:GetProfileDir(profile_slot[player])
 
 
     if profilePath == "" then
